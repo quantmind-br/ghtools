@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # GitHub Tools Installation Script
-# This script installs ghdelete and ghclone to ~/scripts
+# This script installs ghtools to ~/scripts
 
 set -e
 
@@ -42,22 +42,15 @@ fi
 
 # Get the directory where the install script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GHDELETE_SCRIPT="$SCRIPT_DIR/ghdelete"
-GHCLONE_SCRIPT="$SCRIPT_DIR/ghclone"
+GHTOOLS_SCRIPT="$SCRIPT_DIR/ghtools"
 
-# Check if scripts exist
-if [ ! -f "$GHDELETE_SCRIPT" ]; then
-    print_error "ghdelete script not found at: $GHDELETE_SCRIPT"
+# Check if script exists
+if [ ! -f "$GHTOOLS_SCRIPT" ]; then
+    print_error "ghtools script not found at: $GHTOOLS_SCRIPT"
     exit 1
 fi
 
-if [ ! -f "$GHCLONE_SCRIPT" ]; then
-    print_error "ghclone script not found at: $GHCLONE_SCRIPT"
-    exit 1
-fi
-
-print_info "Found ghdelete script at: $GHDELETE_SCRIPT"
-print_info "Found ghclone script at: $GHCLONE_SCRIPT"
+print_info "Found ghtools script at: $GHTOOLS_SCRIPT"
 
 # Check dependencies
 print_info "Checking dependencies..."
@@ -91,16 +84,13 @@ print_success "All dependencies are installed"
 INSTALL_DIR="$HOME/scripts"
 mkdir -p "$INSTALL_DIR"
 
-# Install scripts to ~/scripts
-print_info "Installing scripts to $INSTALL_DIR..."
+# Install script to ~/scripts
+print_info "Installing script to $INSTALL_DIR..."
 
-cp "$GHDELETE_SCRIPT" "$INSTALL_DIR/ghdelete"
-chmod +x "$INSTALL_DIR/ghdelete"
+cp "$GHTOOLS_SCRIPT" "$INSTALL_DIR/ghtools"
+chmod +x "$INSTALL_DIR/ghtools"
 
-cp "$GHCLONE_SCRIPT" "$INSTALL_DIR/ghclone"
-chmod +x "$INSTALL_DIR/ghclone"
-
-print_success "ghdelete and ghclone installed successfully!"
+print_success "ghtools installed successfully!"
 
 # Check if ~/scripts is in PATH
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
@@ -133,10 +123,15 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         fi
     fi
 else
-    print_success "Scripts are now available in your PATH"
+    print_success "Script is now available in your PATH"
     echo ""
-    echo "Run ${GREEN}ghdelete${NC} or ${GREEN}ghclone${NC} to start using them!"
+    echo "Run ${GREEN}ghtools clone${NC} or ${GREEN}ghtools delete${NC} to start using it!"
 fi
 
 echo ""
-print_info "To uninstall, run: rm ~/scripts/ghdelete ~/scripts/ghclone"
+print_info "Usage: ghtools <command>"
+echo "  ${GREEN}ghtools clone${NC}  - Clone repositories interactively"
+echo "  ${GREEN}ghtools delete${NC} - Delete repositories interactively"
+echo "  ${GREEN}ghtools help${NC}   - Show help message"
+echo ""
+print_info "To uninstall, run: rm ~/scripts/ghtools"
