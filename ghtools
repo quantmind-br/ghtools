@@ -31,6 +31,122 @@ print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
+# Ensure text fits within a fixed-width column, appending ellipsis when truncated
+truncate_text() {
+    local input="$1"
+    local max_width="$2"
+    local ellipsis="..."
+
+    if [ "$max_width" -le 0 ]; then
+        printf ""
+        return
+    fi
+
+    if [ "${#input}" -le "$max_width" ]; then
+        printf "%s" "$input"
+        return
+    fi
+
+    if [ "$max_width" -le "${#ellipsis}" ]; then
+        printf "%s" "${input:0:max_width}"
+        return
+    fi
+
+    local slice_width=$((max_width - ${#ellipsis}))
+    if [ "$slice_width" -le 0 ]; then
+        printf "%s" "${input:0:max_width}"
+        return
+    fi
+
+    printf "%s%s" "${input:0:slice_width}" "$ellipsis"
+}
+
+# Normalize strings to ASCII so column widths stay predictable
+normalize_text() {
+    local input="$1"
+    local output=""
+
+    if command -v iconv >/dev/null 2>&1; then
+        set +e
+        output=$(printf "%s" "$input" | iconv -c -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null)
+        local status=$?
+        set -e
+        if [ $status -eq 0 ]; then
+            printf "%s" "$output"
+            return
+        fi
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        set +e
+        output=$(PYTHONIOENCODING=UTF-8 python3 - "$input" <<'PY'
+import sys
+import unicodedata
+
+text = sys.argv[1]
+normalized = unicodedata.normalize("NFKD", text)
+filtered = ''.join(ch for ch in normalized if ord(ch) < 128)
+sys.stdout.write(filtered)
+PY
+)
+        local status=$?
+        set -e
+        if [ $status -eq 0 ]; then
+            printf "%s" "$output"
+            return
+        fi
+    fi
+
+    printf "%s" "$input"
+}
+
+format_timestamp_local() {
+    local iso_ts="$1"
+
+    if [ -z "$iso_ts" ] || [ "$iso_ts" = "N/A" ]; then
+        printf "N/A"
+        return
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        set +e
+        local converted
+        converted=$(PYTHONIOENCODING=UTF-8 python3 - "$iso_ts" <<'PY'
+import sys
+from datetime import datetime, timezone
+
+ts = sys.argv[1]
+try:
+    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    local_dt = dt.astimezone()
+    sys.stdout.write(local_dt.strftime("%Y-%m-%d %H:%M"))
+except Exception:
+    sys.stdout.write("N/A")
+PY
+)
+        local status=$?
+        set -e
+        if [ $status -eq 0 ] && [ -n "$converted" ]; then
+            printf "%s" "$converted"
+            return
+        fi
+    fi
+
+    if command -v date >/dev/null 2>&1; then
+        local converted
+        set +e
+        converted=$(date -d "$iso_ts" '+%Y-%m-%d %H:%M' 2>/dev/null)
+        local status=$?
+        set -e
+        if [ $status -eq 0 ] && [ -n "$converted" ]; then
+            printf "%s" "$converted"
+            return
+        fi
+    fi
+
+    printf "%s" "$iso_ts"
+}
+
 # Display usage information
 show_usage() {
     cat << EOF
@@ -547,41 +663,123 @@ format_table() {
         return 1
     fi
 
-    # Print header
-    printf "${CYAN}%-35s %-25s %-9s %-10s %6s %6s %9s %12s %10s${NC}\n" \
-        "NAME" "DESCRIPTION" "VIS." "LANG" "★" "FORKS" "SIZE" "UPDATED" "STATUS"
-    echo -e "${CYAN}$(printf '─%.0s' {1..142})${NC}"
+    local default_name_width=36
+    local name_width=$default_name_width
+    local desc_width=28
+    local vis_width=10
+    local lang_width=14
+    local size_width=9
+    local updated_width=16
+    local min_desc_width=8
+    local min_lang_width=6
+    local min_updated_width=12
+    local min_size_width=7
+    local spacing_count=5
+
+    # Expand NAME column to fit the longest repository name (after normalization)
+    local max_name_length=0
+    while IFS= read -r raw_name; do
+        local normalized_name
+        normalized_name=$(normalize_text "$raw_name")
+        local current_length=${#normalized_name}
+        if [ "$current_length" -gt "$max_name_length" ]; then
+            max_name_length=$current_length
+        fi
+    done < <(echo "$json" | jq -r '.[].nameWithOwner')
+
+    if [ "$max_name_length" -gt 0 ]; then
+        name_width=$max_name_length
+    fi
+
+    if [ "$name_width" -lt 20 ]; then
+        name_width=20
+    fi
+
+    local total_width=$((name_width + desc_width + vis_width + lang_width + size_width + updated_width + spacing_count))
+    local term_width
+    term_width=$(tput cols 2>/dev/null || echo 120)
+
+    if [ "$term_width" -lt "$total_width" ]; then
+        local reduce=$((total_width - term_width))
+        local widths=("desc_width" "lang_width" "updated_width" "size_width")
+        local mins=("$min_desc_width" "$min_lang_width" "$min_updated_width" "$min_size_width")
+
+        for i in "${!widths[@]}"; do
+            [ "$reduce" -le 0 ] && break
+            local var_name="${widths[$i]}"
+            local min_value="${mins[$i]}"
+            local current_value
+            eval "current_value=\${$var_name}"
+            local available=$((current_value - min_value))
+            if [ "$available" -le 0 ]; then
+                continue
+            fi
+            local shrink=$((reduce < available ? reduce : available))
+            eval "$var_name=$((current_value - shrink))"
+            reduce=$((reduce - shrink))
+        done
+        total_width=$((name_width + desc_width + vis_width + lang_width + size_width + updated_width + spacing_count))
+    fi
+
+    echo ""
+    printf "%b%-*s%b " "$CYAN" "$name_width" "NAME" "$NC"
+    printf "%b%-*s%b " "$CYAN" "$desc_width" "DESCRIPTION" "$NC"
+    printf "%b%-*s%b " "$CYAN" "$vis_width" "VISIBILITY" "$NC"
+    printf "%b%-*s%b " "$CYAN" "$lang_width" "LANGUAGE" "$NC"
+    printf "%b%*s%b " "$CYAN" "$size_width" "SIZE(MB)" "$NC"
+    printf "%b%-*s%b\n" "$CYAN" "$updated_width" "UPDATED" "$NC"
+
+    printf "%b" "$CYAN"
+    printf '%*s' "$total_width" '' | tr ' ' '-'
+    printf "%b\n" "$NC"
 
     # Print repos
     echo "$json" | jq -r '.[] |
         [
             .nameWithOwner,
-            (.description // "No description")[0:24],
+            ((if .description == null or .description == "" then "No description" else .description end) | gsub("[\t\r\n]+"; " ")),
             (if .visibility == "PUBLIC" then "public" elif .visibility == "INTERNAL" then "internal" else "private" end),
-            (.primaryLanguage.name // "N/A")[0:9],
-            (.stargazerCount // 0),
-            (.forkCount // 0),
+            (if .primaryLanguage == null or .primaryLanguage.name == null then "None" else .primaryLanguage.name end),
             (if .diskUsage == null then "0 MB" else ((.diskUsage | tonumber / 1024 | floor | tostring) + " MB") end),
-            (.updatedAt | split("T")[0]),
-            (if .isArchived then "[ARCHIVED]" else "" end)
-        ] | @tsv' | while IFS=$'\t' read -r name desc vis lang stars forks size updated status; do
+            (if .updatedAt == null then "N/A" else .updatedAt end)
+        ] | @tsv' | while IFS=$'\t' read -r name desc vis lang size updated; do
 
-        # Color coding
-        local vis_color="${GREEN}"
-        if [ "$vis" = "private" ]; then
-            vis_color="${YELLOW}"
-        elif [ "$vis" = "internal" ]; then
-            vis_color="${CYAN}"
-        fi
+        local normalized_name
+        normalized_name=$(normalize_text "$name")
+        local display_name
+        display_name=$(truncate_text "$normalized_name" "$name_width")
 
-        local status_color="${NC}"
-        if [ "$status" = "[ARCHIVED]" ]; then
-            status_color="${CYAN}"  # Gray-ish
-        fi
+        local normalized_desc
+        normalized_desc=$(normalize_text "$desc")
+        local display_desc
+        display_desc=$(truncate_text "$normalized_desc" "$desc_width")
 
-        printf "%-35s %-25s ${vis_color}%-8s${NC} %-10s %6s %6s %9s %12s ${status_color}%-10s${NC}\n" \
-            "$name" "$desc" "$vis" "$lang" "$stars" "$forks" "$size" "$updated" "$status"
+        local normalized_lang
+        normalized_lang=$(normalize_text "$lang")
+        local display_lang
+        display_lang=$(truncate_text "$normalized_lang" "$lang_width")
+
+        local vis_color="$NC"
+        case "$vis" in
+            public) vis_color="$GREEN" ;;
+            private) vis_color="$YELLOW" ;;
+            internal) vis_color="$CYAN" ;;
+        esac
+
+        printf "%b%-*s%b " "$BLUE" "$name_width" "$display_name" "$NC"
+        printf "%-*s " "$desc_width" "$display_desc"
+        printf "%b%-*s%b " "$vis_color" "$vis_width" "$vis" "$NC"
+        printf "%-*s " "$lang_width" "$display_lang"
+        local local_updated
+        local_updated=$(format_timestamp_local "$updated")
+        local display_updated
+        display_updated=$(truncate_text "$local_updated" "$updated_width")
+
+        printf "%*s " "$size_width" "$size"
+        printf "%-*s\n" "$updated_width" "$display_updated"
     done
+
+    echo ""
 }
 
 # Format repositories as CSV
@@ -593,22 +791,60 @@ format_csv() {
         return 1
     fi
 
-    # Print header
-    echo "Name,Description,Visibility,Language,Stars,Forks,Size (KB),Updated,Archived"
+    if command -v python3 >/dev/null 2>&1; then
+        echo "$json" | python3 - <<'PY'
+import sys
+import json
+import csv
+from datetime import datetime
 
-    # Print data
-    echo "$json" | jq -r '.[] |
-        [
-            .nameWithOwner,
-            (.description // "No description" | gsub(","; ";")),  # Escape commas
-            (if .visibility == "PUBLIC" then "public" elif .visibility == "INTERNAL" then "internal" else "private" end),
-            (.primaryLanguage.name // "N/A"),
-            (.stargazerCount // 0),
-            .forkCount,
-            (.diskUsage // 0),
-            (.updatedAt | split("T")[0]),
-            (if .isArchived then "true" else "false" end)
-        ] | @csv'
+data = json.load(sys.stdin)
+writer = csv.writer(sys.stdout)
+writer.writerow(["Name", "Description", "Visibility", "Language", "Stars", "Forks", "Size (KB)", "Updated", "Archived"])
+
+for item in data:
+    name = item.get("nameWithOwner", "")
+    description = item.get("description") or "No description"
+    visibility = item.get("visibility", "").lower()
+    if visibility not in {"public", "internal", "private"}:
+        visibility = visibility.lower()
+    language = ""
+    primary_language = item.get("primaryLanguage") or {}
+    language = primary_language.get("name") or "N/A"
+    stars = item.get("stargazerCount", 0) or 0
+    forks = item.get("forkCount", 0) or 0
+    size_kb = item.get("diskUsage", 0) or 0
+    archived = "true" if item.get("isArchived") else "false"
+
+    updated_iso = item.get("updatedAt")
+    if updated_iso:
+        try:
+            dt = datetime.fromisoformat(updated_iso.replace("Z", "+00:00"))
+            updated_local = dt.astimezone().strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            updated_local = updated_iso
+    else:
+        updated_local = ""
+
+    safe_description = description.replace(",", ";").replace("\n", " ").replace("\r", " ")
+    writer.writerow([name, safe_description, visibility, language, stars, forks, size_kb, updated_local, archived])
+PY
+    else
+        # Fallback to UTC timestamps if python is not available
+        echo "Name,Description,Visibility,Language,Stars,Forks,Size (KB),Updated,Archived"
+        echo "$json" | jq -r '.[] |
+            [
+                .nameWithOwner,
+                (.description // "No description" | gsub(","; ";")),
+                (if .visibility == "PUBLIC" then "public" elif .visibility == "INTERNAL" then "internal" else "private" end),
+                (.primaryLanguage.name // "N/A"),
+                (.stargazerCount // 0),
+                .forkCount,
+                (.diskUsage // 0),
+                (.updatedAt // ""),
+                (if .isArchived then "true" else "false" end)
+            ] | @csv'
+    fi
 }
 
 # Format repositories as pretty JSON
