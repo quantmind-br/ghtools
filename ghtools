@@ -37,17 +37,25 @@ show_usage() {
 ${GREEN}ghtools${NC} - Unified GitHub Repository Management Tool
 
 ${YELLOW}Usage:${NC}
-  ghtools <command>
+  ghtools              # Interactive menu (recommended)
+  ghtools <command>    # Direct command
 
 ${YELLOW}Commands:${NC}
+  ${CYAN}list${NC}     List and filter repositories
   ${GREEN}clone${NC}    Clone GitHub repositories interactively
+  ${CYAN}sync${NC}     Synchronize local repositories with remote
+  ${BLUE}create${NC}   Create new repository interactively
   ${RED}delete${NC}   Delete GitHub repositories interactively
   ${BLUE}help${NC}     Show this help message
 
 ${YELLOW}Examples:${NC}
-  ghtools clone     # Clone repositories to current directory
-  ghtools delete    # Delete repositories from GitHub
-  ghtools help      # Show this help
+  ghtools                          # Show interactive menu
+  ghtools list --lang python       # List Python repositories
+  ghtools list --sort stars        # List sorted by stars
+  ghtools sync                     # Sync repositories in current dir
+  ghtools create my-project        # Create new repository
+  ghtools clone                    # Clone repositories
+  ghtools delete                   # Delete repositories
 
 ${YELLOW}Requirements:${NC}
   - gh (GitHub CLI)
@@ -75,8 +83,8 @@ check_dependencies() {
         missing_deps+=("fzf")
     fi
 
-    # Git is only required for cloning
-    if [[ "$action" == "clone" ]] && ! command -v git &> /dev/null; then
+    # Git is required for cloning and syncing
+    if [[ "$action" == "clone" || "$action" == "sync" ]] && ! command -v git &> /dev/null; then
         missing_deps+=("git")
     fi
 
@@ -148,6 +156,1655 @@ fetch_repositories() {
     fi
 
     echo "$repos"
+}
+
+# Fetch repositories with full JSON metadata
+fetch_repositories_json() {
+    local limit=${1:-1000}
+    local fields="name,nameWithOwner,description,visibility,primaryLanguage,stargazerCount,forkCount,watchers,diskUsage,updatedAt,createdAt,isArchived,url,sshUrl"
+
+    print_info "Fetching your repositories..." >&2
+
+    local repos_json
+    repos_json=$(gh repo list --limit "$limit" --json "$fields" 2>&1)
+
+    if [ $? -ne 0 ]; then
+        print_error "Failed to fetch repositories." >&2
+        echo "$repos_json" >&2
+        exit 1
+    fi
+
+    echo "$repos_json"
+}
+
+# Parse JSON with jq if available, fallback to grep/sed
+parse_json() {
+    local json="$1"
+    local field="$2"
+
+    if command -v jq &> /dev/null; then
+        echo "$json" | jq -r "$field"
+    else
+        # Fallback: basic grep/sed parsing (limited functionality)
+        # This is a simplified parser for common cases
+        case "$field" in
+            '.[] | .name')
+                echo "$json" | grep -o '"name":"[^"]*"' | sed 's/"name":"\([^"]*\)"/\1/g'
+                ;;
+            '.[] | .nameWithOwner')
+                echo "$json" | grep -o '"nameWithOwner":"[^"]*"' | sed 's/"nameWithOwner":"\([^"]*\)"/\1/g'
+                ;;
+            *)
+                print_error "Unsupported JSON query without jq: $field" >&2
+                return 1
+                ;;
+        esac
+    fi
+}
+
+# Parse command-line arguments into associative array
+# Usage: parse_args_result=$(parse_args "$@")
+parse_args() {
+    local args=("$@")
+    declare -A parsed_args
+    local positional=()
+
+    local i=0
+    while [ $i -lt ${#args[@]} ]; do
+        local arg="${args[$i]}"
+        case "$arg" in
+            --lang|--language)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[lang]="${args[$i]}"
+                ;;
+            --visibility)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[visibility]="${args[$i]}"
+                ;;
+            --archived)
+                parsed_args[archived]="true"
+                ;;
+            --no-archived)
+                parsed_args[archived]="false"
+                ;;
+            --sort)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[sort]="${args[$i]}"
+                ;;
+            --order)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[order]="${args[$i]}"
+                ;;
+            --export)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[export]="${args[$i]}"
+                ;;
+            --limit)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[limit]="${args[$i]}"
+                ;;
+            --path)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[path]="${args[$i]}"
+                ;;
+            --max-depth)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[max_depth]="${args[$i]}"
+                ;;
+            --all)
+                parsed_args[all]="true"
+                ;;
+            --dry-run)
+                parsed_args[dry_run]="true"
+                ;;
+            --public)
+                parsed_args[visibility]="public"
+                ;;
+            --private)
+                parsed_args[visibility]="private"
+                ;;
+            --description)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[description]="${args[$i]}"
+                ;;
+            --readme)
+                parsed_args[readme]="true"
+                ;;
+            --no-readme)
+                parsed_args[readme]="false"
+                ;;
+            --license)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[license]="${args[$i]}"
+                ;;
+            --gitignore)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[gitignore]="${args[$i]}"
+                ;;
+            --template)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[template]="${args[$i]}"
+                ;;
+            --clone)
+                parsed_args[clone]="true"
+                ;;
+            --no-clone)
+                parsed_args[clone]="false"
+                ;;
+            --default-branch)
+                ((i++))
+                if [ $i -ge ${#args[@]} ]; then
+                    print_error "Option $arg requires a value"
+                    return 1
+                fi
+                parsed_args[default_branch]="${args[$i]}"
+                ;;
+            -*)
+                print_error "Unknown option: $arg"
+                return 1
+                ;;
+            *)
+                positional+=("$arg")
+                ;;
+        esac
+        ((i++))
+    done
+
+    # Return parsed args as key=value pairs
+    for key in "${!parsed_args[@]}"; do
+        echo "$key=${parsed_args[$key]}"
+    done
+
+    # Return positional args
+    if [ ${#positional[@]} -gt 0 ]; then
+        echo "positional=${positional[*]}"
+    fi
+}
+
+# Wrapper for fzf with standardized options
+# Usage: fzf_wrapper "items" "prompt" "color" [multi|single] [preview_cmd]
+fzf_wrapper() {
+    local items="$1"
+    local prompt="$2"
+    local highlight_color="$3"
+    local mode="${4:-multi}"  # multi or single
+    local preview_cmd="${5:-}"
+    local input_data=""
+
+    if [ "$items" = "-" ]; then
+        input_data=$(cat)
+    else
+        input_data="$items"
+    fi
+
+    local fzf_cmd=(
+        fzf
+        --height=80%
+        --border
+        --prompt="$prompt"
+        --header="TAB: select | ENTER: confirm | ESC: cancel"
+        --color="fg:#ffffff,bg:#000000,hl:${highlight_color}"
+        --color="fg+:#ffffff,bg+:#333333,hl+:${highlight_color}"
+        --color="info:#00ffff,prompt:${highlight_color},pointer:${highlight_color}"
+        --color="marker:${highlight_color},spinner:#00ffff,header:#00ff00"
+        --bind='ctrl-a:select-all,ctrl-d:deselect-all'
+    )
+
+    if [ "$mode" = "multi" ]; then
+        fzf_cmd+=(--multi)
+    fi
+
+    if [ -n "$preview_cmd" ]; then
+        fzf_cmd+=(--preview="$preview_cmd" --preview-window=up:3:wrap)
+    fi
+
+    local result
+    set +e
+    result=$(printf "%s" "$input_data" | "${fzf_cmd[@]}")
+    local status=$?
+    set -e
+
+    if [ $status -ne 0 ]; then
+        echo ""
+        return 0
+    fi
+
+    printf "%s" "$result"
+}
+
+# Validate repository name format
+# Returns 0 if valid, 1 if invalid
+validate_repo_name() {
+    local name="$1"
+
+    # Check: not empty
+    if [ -z "$name" ]; then
+        print_error "Repository name cannot be empty"
+        return 1
+    fi
+
+    # Check: length (1-100 characters)
+    if [ ${#name} -gt 100 ]; then
+        print_error "Repository name too long (max 100 characters)"
+        return 1
+    fi
+
+    # Check: valid characters (alphanumeric, hyphens, underscores)
+    if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        print_error "Repository name must contain only letters, numbers, hyphens, and underscores"
+        return 1
+    fi
+
+    # Check: doesn't start with hyphen or underscore
+    if [[ "$name" =~ ^[-_] ]]; then
+        print_error "Repository name cannot start with a hyphen or underscore"
+        return 1
+    fi
+
+    return 0
+}
+
+# Filter repositories based on criteria
+# Usage: filtered=$(filter_repositories "$json" "$lang" "$visibility" "$archived")
+filter_repositories() {
+    local json="$1"
+    local lang="$2"
+    local visibility="$3"
+    local archived="$4"  # "true", "false", or "all"
+
+    local filtered="$json"
+
+    # Filter by language
+    if [ -n "$lang" ] && [ "$lang" != "all" ]; then
+        if command -v jq &> /dev/null; then
+            filtered=$(echo "$filtered" | jq "[.[] | select(.primaryLanguage.name != null and (.primaryLanguage.name | ascii_downcase) == \"$(echo "$lang" | tr '[:upper:]' '[:lower:]')\")]")
+        else
+            # Fallback: grep-based filtering (approximate)
+            filtered=$(echo "$filtered" | grep -i "\"primaryLanguage\".*\"name\":\"$lang\"" || echo "[]")
+        fi
+    fi
+
+    # Filter by visibility
+    if [ -n "$visibility" ] && [ "$visibility" != "all" ]; then
+        local visibility_upper=$(echo "$visibility" | tr '[:lower:]' '[:upper:]')
+        if command -v jq &> /dev/null; then
+            filtered=$(echo "$filtered" | jq "[.[] | select(.visibility == \"$visibility_upper\")]")
+        else
+            filtered=$(echo "$filtered" | grep "\"visibility\":\"$visibility_upper\"" || echo "[]")
+        fi
+    fi
+
+    # Filter by archived status
+    if [ -n "$archived" ]; then
+        if [ "$archived" = "true" ]; then
+            # Only archived
+            if command -v jq &> /dev/null; then
+                filtered=$(echo "$filtered" | jq '[.[] | select(.isArchived == true)]')
+            fi
+        elif [ "$archived" = "false" ]; then
+            # Exclude archived (default)
+            if command -v jq &> /dev/null; then
+                filtered=$(echo "$filtered" | jq '[.[] | select(.isArchived == false)]')
+            fi
+        fi
+    fi
+
+    echo "$filtered"
+}
+
+# Sort repositories by field
+# Usage: sorted=$(sort_repositories "$json" "$sort_field" "$order")
+sort_repositories() {
+    local json="$1"
+    local sort_field="${2:-updated}"  # stars, created, updated, name
+    local order="${3:-desc}"          # asc or desc
+
+    if ! command -v jq &> /dev/null; then
+        # Without jq, return unsorted
+        echo "$json"
+        return
+    fi
+
+    local jq_sort=""
+    case "$sort_field" in
+        stars)
+            jq_sort=".stargazerCount"
+            ;;
+        created)
+            jq_sort=".createdAt"
+            ;;
+        updated)
+            jq_sort=".updatedAt"
+            ;;
+        name)
+            jq_sort=".nameWithOwner"
+            ;;
+        *)
+            # Default: updated
+            jq_sort=".updatedAt"
+            ;;
+    esac
+
+    if [ "$order" = "asc" ]; then
+        echo "$json" | jq "sort_by($jq_sort)"
+    else
+        echo "$json" | jq "sort_by($jq_sort) | reverse"
+    fi
+}
+
+# Format repositories as aligned table
+format_table() {
+    local json="$1"
+
+    if ! command -v jq &> /dev/null; then
+        print_error "jq is required for table formatting"
+        return 1
+    fi
+
+    # Print header
+    printf "${CYAN}%-35s %-25s %-9s %-10s %6s %6s %9s %12s %10s${NC}\n" \
+        "NAME" "DESCRIPTION" "VIS." "LANG" "★" "FORKS" "SIZE" "UPDATED" "STATUS"
+    echo -e "${CYAN}$(printf '─%.0s' {1..142})${NC}"
+
+    # Print repos
+    echo "$json" | jq -r '.[] |
+        [
+            .nameWithOwner,
+            (.description // "No description")[0:24],
+            (if .visibility == "PUBLIC" then "public" elif .visibility == "INTERNAL" then "internal" else "private" end),
+            (.primaryLanguage.name // "N/A")[0:9],
+            (.stargazerCount // 0),
+            (.forkCount // 0),
+            (if .diskUsage == null then "0 MB" else ((.diskUsage | tonumber / 1024 | floor | tostring) + " MB") end),
+            (.updatedAt | split("T")[0]),
+            (if .isArchived then "[ARCHIVED]" else "" end)
+        ] | @tsv' | while IFS=$'\t' read -r name desc vis lang stars forks size updated status; do
+
+        # Color coding
+        local vis_color="${GREEN}"
+        if [ "$vis" = "private" ]; then
+            vis_color="${YELLOW}"
+        elif [ "$vis" = "internal" ]; then
+            vis_color="${CYAN}"
+        fi
+
+        local status_color="${NC}"
+        if [ "$status" = "[ARCHIVED]" ]; then
+            status_color="${CYAN}"  # Gray-ish
+        fi
+
+        printf "%-35s %-25s ${vis_color}%-8s${NC} %-10s %6s %6s %9s %12s ${status_color}%-10s${NC}\n" \
+            "$name" "$desc" "$vis" "$lang" "$stars" "$forks" "$size" "$updated" "$status"
+    done
+}
+
+# Format repositories as CSV
+format_csv() {
+    local json="$1"
+
+    if ! command -v jq &> /dev/null; then
+        print_error "jq is required for CSV export"
+        return 1
+    fi
+
+    # Print header
+    echo "Name,Description,Visibility,Language,Stars,Forks,Size (KB),Updated,Archived"
+
+    # Print data
+    echo "$json" | jq -r '.[] |
+        [
+            .nameWithOwner,
+            (.description // "No description" | gsub(","; ";")),  # Escape commas
+            (if .visibility == "PUBLIC" then "public" elif .visibility == "INTERNAL" then "internal" else "private" end),
+            (.primaryLanguage.name // "N/A"),
+            (.stargazerCount // 0),
+            .forkCount,
+            (.diskUsage // 0),
+            (.updatedAt | split("T")[0]),
+            (if .isArchived then "true" else "false" end)
+        ] | @csv'
+}
+
+# Format repositories as pretty JSON
+format_json() {
+    local json="$1"
+
+    if command -v jq &> /dev/null; then
+        echo "$json" | jq '.'
+    else
+        echo "$json"
+    fi
+}
+
+# List repositories action with filtering, sorting, and export
+action_list() {
+    # Parse arguments
+    local args_str=$(parse_args "$@")
+    declare -A opts
+    while IFS='=' read -r key value; do
+        [ -z "$key" ] && continue
+        opts["$key"]="$value"
+    done <<< "$args_str"
+
+    # Extract options with defaults
+    local lang="${opts[lang]:-}"
+    local visibility="${opts[visibility]:-all}"
+    local archived="${opts[archived]:-false}"
+    local sort_field="${opts[sort]:-updated}"
+    local order="${opts[order]:-desc}"
+    local export_format="${opts[export]:-table}"
+    local limit="${opts[limit]:-1000}"
+
+    # Fetch repositories
+    local repos_json
+    repos_json=$(fetch_repositories_json "$limit")
+
+    # Count total
+    local total_count
+    if command -v jq &> /dev/null; then
+        total_count=$(echo "$repos_json" | jq 'length')
+    else
+        total_count=$(echo "$repos_json" | grep -o '"name":' | wc -l)
+    fi
+    print_info "Found $total_count repositories" >&2
+
+    # Filter
+    repos_json=$(filter_repositories "$repos_json" "$lang" "$visibility" "$archived")
+
+    # Count filtered
+    local filtered_count
+    if command -v jq &> /dev/null; then
+        filtered_count=$(echo "$repos_json" | jq 'length')
+    else
+        filtered_count=$total_count
+    fi
+
+    if [ "$filtered_count" -ne "$total_count" ]; then
+        print_info "Filtered to $filtered_count repositories" >&2
+    fi
+
+    # Sort when jq available
+    if command -v jq &> /dev/null; then
+        local sorted_json
+        sorted_json=$(sort_repositories "$repos_json" "$sort_field" "$order")
+        if [ $? -ne 0 ] || [ -z "$sorted_json" ]; then
+            print_error "Failed to sort repositories"
+            exit 1
+        fi
+        repos_json="$sorted_json"
+    fi
+
+    # Format and output
+    echo "" >&2
+    case "$export_format" in
+        csv)
+            format_csv "$repos_json"
+            ;;
+        json)
+            format_json "$repos_json"
+            ;;
+        table|*)
+            format_table "$repos_json"
+            ;;
+    esac
+
+    echo "" >&2
+    print_success "Listed $filtered_count repositories" >&2
+}
+
+# Discover git repositories in directory tree
+# Returns: Array of repository paths
+discover_repositories() {
+    local base_path="${1:-.}"
+    local max_depth="${2:-5}"
+
+    print_info "Scanning directory: $base_path" >&2
+
+    # Find all .git directories
+    local git_dirs=()
+    while IFS= read -r git_dir; do
+        # Get parent directory (the actual repo path)
+        local repo_path=$(dirname "$git_dir")
+        git_dirs+=("$repo_path")
+    done < <(find "$base_path" -maxdepth "$max_depth" -name .git -type d 2>/dev/null)
+
+    # Filter to GitHub repositories only
+    local github_repos=()
+    for repo_path in "${git_dirs[@]}"; do
+        local remote_url=$(git -C "$repo_path" remote get-url origin 2>/dev/null || echo "")
+
+        # Check if it's a GitHub URL (https or ssh)
+        if [[ "$remote_url" =~ github\.com ]]; then
+            github_repos+=("$repo_path")
+        fi
+    done
+
+    print_info "Found ${#git_dirs[@]} Git repositories (${#github_repos[@]} GitHub)" >&2
+
+    # Return as newline-separated list
+    printf '%s\n' "${github_repos[@]}"
+}
+
+# Get repository sync status
+# Returns: Status string for display
+get_repo_status() {
+    local repo_path="$1"
+    local repo_name=$(basename "$repo_path")
+
+    # Get current branch
+    local branch=$(git -C "$repo_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
+    # Check for uncommitted changes
+    local has_changes=0
+    if ! git -C "$repo_path" diff-index --quiet HEAD -- 2>/dev/null; then
+        has_changes=1
+    fi
+
+    # Check for untracked files
+    local has_untracked=0
+    if [ -n "$(git -C "$repo_path" ls-files --others --exclude-standard 2>/dev/null)" ]; then
+        has_untracked=1
+    fi
+
+    # Get ahead/behind counts
+    local ahead=0
+    local behind=0
+    local remote_branch="origin/$branch"
+
+    if git -C "$repo_path" rev-parse --verify "$remote_branch" &>/dev/null; then
+        local counts=$(git -C "$repo_path" rev-list --left-right --count "$remote_branch...HEAD" 2>/dev/null || echo "0 0")
+        behind=$(echo "$counts" | awk '{print $1}')
+        ahead=$(echo "$counts" | awk '{print $2}')
+    fi
+
+    # Determine status
+    local status="SYNCED"
+    local status_color="${GREEN}"
+    local status_text="✓"
+
+    if [ $has_changes -eq 1 ] || [ $has_untracked -eq 1 ]; then
+        status="DIRTY"
+        status_color="${YELLOW}"
+        status_text="⚠ Uncommitted changes"
+    elif [ $behind -gt 0 ]; then
+        status="BEHIND"
+        status_color="${YELLOW}"
+        status_text="↓$behind Behind by $behind commits"
+    elif [ $ahead -gt 0 ]; then
+        status="AHEAD"
+        status_color="${BLUE}"
+        status_text="↑$ahead Ahead by $ahead commits"
+    fi
+
+    # Format: repo_name [branch status] status_text
+    echo "${status_color}${repo_name}${NC} [${branch} ${status_text}]|${status}|${repo_path}"
+}
+
+# Sync a single repository
+# Returns: 0 on success, 1 on failure, 2 on skip
+sync_repository() {
+    local repo_path="$1"
+    local repo_name=$(basename "$repo_path")
+
+    # Check for uncommitted changes
+    if ! git -C "$repo_path" diff-index --quiet HEAD -- 2>/dev/null; then
+        print_warning "Skipped (uncommitted changes): $repo_name"
+        return 2
+    fi
+
+    # Check for conflicts
+    if git -C "$repo_path" ls-files -u 2>/dev/null | grep -q .; then
+        print_warning "Skipped (conflicts detected): $repo_name"
+        return 2
+    fi
+
+    # Attempt pull with --ff-only (safe)
+    local output
+    output=$(git -C "$repo_path" pull --ff-only 2>&1)
+    local exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        if echo "$output" | grep -q "Already up to date"; then
+            print_info "Already up to date: $repo_name"
+        else
+            print_success "Synced: $repo_name"
+        fi
+        return 0
+    else
+        print_error "Failed to sync: $repo_name"
+        echo "$output" | head -n 3
+        return 1
+    fi
+}
+
+# Sync repositories action
+action_sync() {
+    # Parse arguments
+    local args_str=$(parse_args "$@")
+    declare -A opts
+    while IFS='=' read -r key value; do
+        [ -z "$key" ] && continue
+        opts["$key"]="$value"
+    done <<< "$args_str"
+
+    local path="${opts[path]:-$(pwd)}"
+    local max_depth="${opts[max_depth]:-5}"
+    local sync_all="${opts[all]:-false}"
+    local dry_run="${opts[dry_run]:-false}"
+
+    echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║   GitHub Repository Sync Tool             ║${NC}"
+    echo -e "${CYAN}║   Sync local repos with remote            ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Discover repositories
+    local repos
+    mapfile -t repos < <(discover_repositories "$path" "$max_depth")
+
+    if [ ${#repos[@]} -eq 0 ]; then
+        print_warning "No GitHub repositories found in $path"
+        exit 0
+    fi
+
+    # Build status list
+    local status_list=()
+    declare -A status_map
+    for repo_path in "${repos[@]}"; do
+        local status_info=$(get_repo_status "$repo_path")
+        local display=$(echo "$status_info" | cut -d'|' -f1)
+        local status=$(echo "$status_info" | cut -d'|' -f2)
+        local path_val=$(echo "$status_info" | cut -d'|' -f3)
+
+        status_list+=("$display")
+        status_map["$display"]="$path_val"
+    done
+
+    # Interactive selection or all
+    local selected_displays=()
+    if [ "$sync_all" = "true" ]; then
+        selected_displays=("${status_list[@]}")
+    else
+        echo ""
+        print_info "Select repositories to SYNC (use TAB for multi-select, ENTER to confirm):"
+        echo ""
+
+        local selected
+        selected=$(printf '%s\n' "${status_list[@]}" | fzf_wrapper - "Select repos to SYNC > " "#00ffff" multi)
+
+        if [ -z "$selected" ]; then
+            print_warning "No repositories selected. Exiting."
+            exit 0
+        fi
+
+        mapfile -t selected_displays <<< "$selected"
+    fi
+
+    # Confirmation
+    echo ""
+    print_info "You selected ${#selected_displays[@]} repository(ies)"
+    echo ""
+
+    if [ "$dry_run" = "true" ]; then
+        print_info "DRY RUN - No changes will be made"
+        for display in "${selected_displays[@]}"; do
+            echo "  Would sync: $display"
+        done
+        exit 0
+    fi
+
+    read -p "Proceed with sync? (Y/n): " -r
+    echo ""
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        print_info "Sync cancelled."
+        exit 0
+    fi
+
+    # Sync repositories
+    echo ""
+    print_info "Starting sync process..."
+    echo ""
+
+    local success_count=0
+    local skip_count=0
+    local fail_count=0
+    local skipped_repos=()
+    local failed_repos=()
+
+    set +e
+    for display in "${selected_displays[@]}"; do
+        local repo_path="${status_map[$display]}"
+        local repo_name=$(basename "$repo_path")
+
+        echo -e "${BLUE}[SYNCING]${NC} $repo_name"
+        sync_repository "$repo_path"
+        local result=$?
+
+        if [ $result -eq 0 ]; then
+            ((success_count++))
+        elif [ $result -eq 2 ]; then
+            skipped_repos+=("$repo_name")
+            ((skip_count++))
+        else
+            failed_repos+=("$repo_name")
+            ((fail_count++))
+        fi
+        echo ""
+    done
+    set -e
+
+    # Summary
+    echo -e "${CYAN}═══════════════════════════════════════════${NC}"
+    echo -e "${CYAN}SUMMARY${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════${NC}"
+    print_success "Successfully synced: $success_count"
+
+    if [ $skip_count -gt 0 ]; then
+        print_warning "Skipped (uncommitted changes or conflicts): $skip_count"
+        echo ""
+        echo "Skipped repositories:"
+        for repo in "${skipped_repos[@]}"; do
+            echo "  - $repo"
+        done
+    fi
+
+    if [ $fail_count -gt 0 ]; then
+        print_error "Failed to sync: $fail_count"
+        echo ""
+        echo "Failed repositories:"
+        for repo in "${failed_repos[@]}"; do
+            echo "  - $repo"
+        done
+    fi
+    echo ""
+}
+
+# Prompt for repository name with validation
+prompt_repo_name() {
+    while true; do
+        read -p "Repository name: " repo_name
+        if validate_repo_name "$repo_name"; then
+            echo "$repo_name"
+            return 0
+        fi
+    done
+}
+
+# Prompt for description
+prompt_description() {
+    read -p "Description (optional): " description
+    echo "$description"
+}
+
+# Normalize visibility string; returns lowercase value or empty on failure
+normalize_visibility() {
+    local value="${1:-}"
+    value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+    case "$value" in
+        public|private)
+            echo "$value"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Normalize license identifier to GitHub API keys
+normalize_license() {
+    local value="${1:-}"
+    value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+    case "$value" in
+        ""|"none"|"no" )
+            echo "none"
+            return 0
+            ;;
+        mit)
+            echo "mit"
+            return 0
+            ;;
+        apache-2.0|apache2|apache)
+            echo "apache-2.0"
+            return 0
+            ;;
+        gpl-3.0|gpl3|gplv3)
+            echo "gpl-3.0"
+            return 0
+            ;;
+        bsd-3-clause|bsd3|bsd-3)
+            echo "bsd-3-clause"
+            return 0
+            ;;
+        mpl-2.0|mpl2|mpl)
+            echo "mpl-2.0"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Human-friendly label for license summary
+format_license_display() {
+    local value="${1:-none}"
+    case "$value" in
+        ""|"none")
+            echo "None"
+            ;;
+        mit)
+            echo "MIT"
+            ;;
+        apache-2.0)
+            echo "Apache-2.0"
+            ;;
+        gpl-3.0)
+            echo "GPL-3.0"
+            ;;
+        bsd-3-clause)
+            echo "BSD-3-Clause"
+            ;;
+        mpl-2.0)
+            echo "MPL-2.0"
+            ;;
+        *)
+            echo "$value"
+            ;;
+    esac
+}
+
+# Normalize gitignore template names to GitHub expectations
+normalize_gitignore() {
+    local value="${1:-}"
+    value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+    case "$value" in
+        ""|"none"|"no")
+            echo "none"
+            return 0
+            ;;
+        python)
+            echo "Python"
+            return 0
+            ;;
+        node|node.js|nodejs)
+            echo "Node"
+            return 0
+            ;;
+        go|golang)
+            echo "Go"
+            return 0
+            ;;
+        rust)
+            echo "Rust"
+            return 0
+            ;;
+        java)
+            echo "Java"
+            return 0
+            ;;
+        c++|cpp)
+            echo "C++"
+            return 0
+            ;;
+        web)
+            echo "Web"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Human-friendly label for gitignore summary
+format_gitignore_display() {
+    local value="${1:-none}"
+    case "$value" in
+        ""|"none")
+            echo "None"
+            ;;
+        *)
+            echo "$value"
+            ;;
+    esac
+}
+
+# Normalize template identifier
+normalize_template() {
+    local value="${1:-}"
+    value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+    case "$value" in
+        ""|"none"|"no")
+            echo "none"
+            return 0
+            ;;
+        python|node|go|rust|web)
+            echo "$value"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Friendly template label
+format_template_display() {
+    local value="${1:-none}"
+    case "$value" in
+        ""|"none")
+            echo "None"
+            ;;
+        python)
+            echo "Python"
+            ;;
+        node)
+            echo "Node.js"
+            ;;
+        go)
+            echo "Go"
+            ;;
+        rust)
+            echo "Rust"
+            ;;
+        web)
+            echo "Web"
+            ;;
+        *)
+            echo "$value"
+            ;;
+    esac
+}
+
+# Friendly visibility label
+format_visibility_display() {
+    local value="${1:-private}"
+    case "$value" in
+        public)
+            echo "Public"
+            ;;
+        private)
+            echo "Private"
+            ;;
+        *)
+            echo "$value"
+            ;;
+    esac
+}
+
+# Select visibility
+select_visibility() {
+    local options="public
+private"
+    local selected
+    selected=$(fzf_wrapper "$options" "Select visibility > " "#00ff00" single)
+
+    if [ -z "$selected" ]; then
+        print_warning "No visibility selected. Defaulting to private."
+        echo "private"
+        return 0
+    fi
+
+    local normalized
+    if ! normalized=$(normalize_visibility "$selected"); then
+        print_warning "Invalid visibility selected. Defaulting to private."
+        echo "private"
+        return 0
+    fi
+
+    echo "$normalized"
+}
+
+# Select license
+select_license() {
+    local options=$'none | No license\nmit | MIT License (permissive)\napache-2.0 | Apache 2.0 (permissive, patent protection)\ngpl-3.0 | GNU GPL v3 (copyleft)\nbsd-3-clause | BSD 3-Clause (permissive)\nmpl-2.0 | Mozilla Public License 2.0'
+    local selected
+    selected=$(fzf_wrapper "$options" "Select license > " "#00ff00" single)
+
+    if [ -z "$selected" ]; then
+        echo "none"
+        return 0
+    fi
+
+    local choice=${selected%% *}
+    local normalized
+    if ! normalized=$(normalize_license "$choice"); then
+        print_warning "Unknown license selected ($choice); skipping license."
+        echo "none"
+        return 0
+    fi
+
+    echo "$normalized"
+}
+
+# Select .gitignore template
+select_gitignore() {
+    local options="Python
+Node
+Go
+Rust
+Java
+C++
+Web
+None"
+
+    local selected
+    selected=$(fzf_wrapper "$options" "Select .gitignore > " "#00ff00" single)
+
+    if [ -z "$selected" ]; then
+        echo "none"
+        return 0
+    fi
+
+    local normalized
+    if ! normalized=$(normalize_gitignore "$selected"); then
+        print_warning "Unknown .gitignore template selected ($selected); skipping template."
+        echo "none"
+        return 0
+    fi
+
+    echo "$normalized"
+}
+
+# Select project template
+select_template() {
+    local options="python
+node
+go
+rust
+web
+none"
+
+    local preview_cmd='case {} in
+        python) echo "Python: requirements.txt, pyproject.toml, main.py" ;;
+        node) echo "Node.js: package.json, index.js" ;;
+        go) echo "Go: go.mod, main.go" ;;
+        rust) echo "Rust: Cargo.toml, src/main.rs" ;;
+        web) echo "Web: index.html, style.css, script.js" ;;
+        none) echo "No template" ;;
+    esac'
+
+    local selected
+    selected=$(fzf_wrapper "$options" "Select template > " "#00ff00" single "$preview_cmd")
+
+    if [ -z "$selected" ]; then
+        echo "none"
+        return 0
+    fi
+
+    local normalized
+    if ! normalized=$(normalize_template "$selected"); then
+        print_warning "Unknown template selected ($selected); skipping template."
+        echo "none"
+        return 0
+    fi
+
+    echo "$normalized"
+}
+
+# Python template
+template_python() {
+    local repo_path="$1"
+
+    # requirements.txt
+    cat > "$repo_path/requirements.txt" << 'EOF'
+# Add your project dependencies here
+# Example:
+# requests>=2.31.0
+# numpy>=1.24.0
+EOF
+
+    # main.py
+    cat > "$repo_path/main.py" << 'EOF'
+#!/usr/bin/env python3
+"""
+Main module for the project.
+"""
+
+def main():
+    """Main entry point."""
+    print("Hello from Python!")
+
+if __name__ == "__main__":
+    main()
+EOF
+
+    # pyproject.toml
+    cat > "$repo_path/pyproject.toml" << 'EOF'
+[project]
+name = "my-project"
+version = "0.1.0"
+description = "A Python project"
+requires-python = ">=3.8"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+EOF
+
+    chmod +x "$repo_path/main.py"
+}
+
+# Node.js template
+template_node() {
+    local repo_path="$1"
+
+    # package.json
+    cat > "$repo_path/package.json" << 'EOF'
+{
+  "name": "my-project",
+  "version": "1.0.0",
+  "description": "A Node.js project",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}
+EOF
+
+    # index.js
+    cat > "$repo_path/index.js" << 'EOF'
+#!/usr/bin/env node
+
+console.log("Hello from Node.js!");
+EOF
+
+    chmod +x "$repo_path/index.js"
+}
+
+# Go template
+template_go() {
+    local repo_path="$1"
+    local repo_name=$(basename "$repo_path")
+
+    # go.mod
+    cat > "$repo_path/go.mod" << EOF
+module github.com/user/$repo_name
+
+go 1.21
+EOF
+
+    # main.go
+    cat > "$repo_path/main.go" << 'EOF'
+package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("Hello from Go!")
+}
+EOF
+}
+
+# Rust template
+template_rust() {
+    local repo_path="$1"
+    local repo_name=$(basename "$repo_path")
+
+    # Cargo.toml
+    cat > "$repo_path/Cargo.toml" << EOF
+[package]
+name = "$repo_name"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+EOF
+
+    # Create src directory and main.rs
+    mkdir -p "$repo_path/src"
+    cat > "$repo_path/src/main.rs" << 'EOF'
+fn main() {
+    println!("Hello from Rust!");
+}
+EOF
+}
+
+# Web template
+template_web() {
+    local repo_path="$1"
+
+    # index.html
+    cat > "$repo_path/index.html" << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Web Project</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Hello from Web!</h1>
+    <script src="script.js"></script>
+</body>
+</html>
+EOF
+
+    # style.css
+    cat > "$repo_path/style.css" << 'EOF'
+body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 50px auto;
+    padding: 20px;
+}
+
+h1 {
+    color: #333;
+}
+EOF
+
+    # script.js
+    cat > "$repo_path/script.js" << 'EOF'
+console.log("Hello from JavaScript!");
+EOF
+}
+
+# Apply project template
+apply_template() {
+    local repo_path="$1"
+    local template="$2"
+
+    case "$template" in
+        python)
+            template_python "$repo_path"
+            ;;
+        node)
+            template_node "$repo_path"
+            ;;
+        go)
+            template_go "$repo_path"
+            ;;
+        rust)
+            template_rust "$repo_path"
+            ;;
+        web)
+            template_web "$repo_path"
+            ;;
+        none|*)
+            # No template
+            return 0
+            ;;
+    esac
+}
+
+# Create repository action
+action_create() {
+    # Parse arguments
+    local args_str=$(parse_args "$@")
+    declare -A opts
+    while IFS='=' read -r key value; do
+        [ -z "$key" ] && continue
+        opts["$key"]="$value"
+    done <<< "$args_str"
+
+    local positional="${opts[positional]:-}"
+
+    echo -e "${GREEN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║   GitHub Repository Creation Tool         ║${NC}"
+    echo -e "${GREEN}║   Create new repositories interactively   ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Get repository name
+    local repo_name
+    if [ -n "$positional" ]; then
+        repo_name="$positional"
+        if ! validate_repo_name "$repo_name"; then
+            exit 1
+        fi
+    else
+        repo_name=$(prompt_repo_name)
+    fi
+
+    # Get description
+    local description="${opts[description]:-}"
+    if [ -z "$description" ]; then
+        description=$(prompt_description)
+    fi
+
+    # Get visibility
+    local visibility_input="${opts[visibility]:-}"
+    local visibility=""
+    if [ -n "$visibility_input" ]; then
+        if ! visibility=$(normalize_visibility "$visibility_input"); then
+            print_warning "Unknown visibility '$visibility_input'. Defaulting to private."
+            visibility="private"
+        fi
+    else
+        visibility=$(select_visibility)
+    fi
+
+    # README
+    local add_readme="${opts[readme]:-prompt}"
+    if [ "$add_readme" != "prompt" ]; then
+        add_readme=$(printf '%s' "$add_readme" | tr '[:upper:]' '[:lower:]')
+        case "$add_readme" in
+            y|yes|true)
+                add_readme="true"
+                ;;
+            n|no|false)
+                add_readme="false"
+                ;;
+            *)
+                add_readme="prompt"
+                ;;
+        esac
+    fi
+    if [ "$add_readme" = "prompt" ]; then
+        read -p "Add README.md? (Y/n): " -r
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            add_readme="false"
+        else
+            add_readme="true"
+        fi
+    fi
+
+    # License
+    local license_input="${opts[license]:-}"
+    local license=""
+    if [ -n "$license_input" ]; then
+        if ! license=$(normalize_license "$license_input"); then
+            print_warning "Unknown license '$license_input'. Skipping license."
+            license="none"
+        fi
+    else
+        license=$(select_license)
+    fi
+    [ -z "$license" ] && license="none"
+
+    # Gitignore
+    local gitignore_input="${opts[gitignore]:-}"
+    local gitignore=""
+    if [ -n "$gitignore_input" ]; then
+        if ! gitignore=$(normalize_gitignore "$gitignore_input"); then
+            print_warning "Unknown .gitignore template '$gitignore_input'. Skipping template."
+            gitignore="none"
+        fi
+    else
+        gitignore=$(select_gitignore)
+    fi
+    [ -z "$gitignore" ] && gitignore="none"
+
+    # Template
+    local template_input="${opts[template]:-}"
+    local template=""
+    if [ -n "$template_input" ]; then
+        if ! template=$(normalize_template "$template_input"); then
+            print_warning "Unknown project template '$template_input'. Skipping template."
+            template="none"
+        fi
+    else
+        read -p "Use project template? (Y/n): " -r
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            template=$(select_template)
+        else
+            template="none"
+        fi
+    fi
+    [ -z "$template" ] && template="none"
+
+    # Clone preference
+    local should_clone="${opts[clone]:-prompt}"
+    if [ "$should_clone" != "prompt" ]; then
+        should_clone=$(printf '%s' "$should_clone" | tr '[:upper:]' '[:lower:]')
+        case "$should_clone" in
+            y|yes|true)
+                should_clone="true"
+                ;;
+            n|no|false)
+                should_clone="false"
+                ;;
+            *)
+                should_clone="prompt"
+                ;;
+        esac
+    fi
+
+    # Summary
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────${NC}"
+    echo -e "${CYAN}SUMMARY${NC}"
+    echo -e "${CYAN}────────────────────────────────────────────${NC}"
+    echo "Name:        $repo_name"
+    echo "Description: $description"
+    echo "Visibility:  $(format_visibility_display "$visibility")"
+    if [ "$add_readme" = "true" ]; then
+        echo "README:      Yes"
+    else
+        echo "README:      No"
+    fi
+    echo "License:     $(format_license_display "$license")"
+    echo "Gitignore:   $(format_gitignore_display "$gitignore")"
+    echo "Template:    $(format_template_display "$template")"
+    echo -e "${CYAN}────────────────────────────────────────────${NC}"
+    echo ""
+
+    read -p "Proceed with creation? (Y/n): " -r
+    echo ""
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        print_info "Creation cancelled."
+        exit 0
+    fi
+
+    # Build gh command
+    local gh_cmd=("gh" "repo" "create" "$repo_name")
+
+    if [ "$visibility" = "private" ]; then
+        gh_cmd+=("--private")
+    else
+        gh_cmd+=("--public")
+    fi
+
+    if [ "$add_readme" = "true" ]; then
+        gh_cmd+=("--add-readme")
+    fi
+
+    if [ "$license" != "none" ]; then
+        gh_cmd+=("--license" "$license")
+    fi
+
+    if [ "$gitignore" != "none" ]; then
+        gh_cmd+=("--gitignore" "$gitignore")
+    fi
+
+    if [ -n "$description" ]; then
+        gh_cmd+=("--description" "$description")
+    fi
+
+    # Create repository
+    print_info "Creating repository..."
+    local output=""
+    set +e
+    output=$("${gh_cmd[@]}" 2>&1)
+    local exit_code=$?
+    set -e
+
+    if [ $exit_code -ne 0 ]; then
+        print_error "Failed to create repository"
+        echo "$output"
+        exit 1
+    fi
+
+    print_success "Repository created: $repo_name"
+
+    # Extract URL from output or fallback to gh repo view
+    local repo_url
+    repo_url=$(echo "$output" | grep -o 'https://github.com/[^ ]*' | head -1 || true)
+    if [ -z "$repo_url" ]; then
+        set +e
+        repo_url=$(gh repo view "$repo_name" --json url -q .url 2>/dev/null)
+        set -e
+    fi
+    local repo_full_name="$repo_name"
+    if [ -n "$repo_url" ]; then
+        repo_url=$(printf '%s' "$repo_url" | tr -d '\r\n')
+        repo_full_name="${repo_url#https://github.com/}"
+        if [ -z "$repo_full_name" ] || [ "$repo_full_name" = "$repo_url" ]; then
+            repo_full_name="$repo_name"
+        fi
+    fi
+    repo_full_name=$(printf '%s' "$repo_full_name" | tr -d '\r\n')
+
+    # Apply template if needed
+    if [ "$template" != "none" ] && [ -n "$template" ]; then
+        # Need to clone first to apply template
+        print_info "Applying $template template..."
+
+        local temp_clone
+        temp_clone=$(mktemp -d 2>/dev/null || true)
+        if [ -z "$temp_clone" ]; then
+            print_error "Unable to create temporary directory for template application."
+            exit 1
+        fi
+
+        set +e
+        local template_clone_output
+        template_clone_output=$(gh repo clone "$repo_full_name" "$temp_clone" 2>&1)
+        local template_clone_exit=$?
+        set -e
+
+        if [ $template_clone_exit -ne 0 ]; then
+            print_error "Failed to clone repository for template application"
+            echo "$template_clone_output"
+            rm -rf "$temp_clone"
+            exit 1
+        fi
+
+        apply_template "$temp_clone" "$template"
+
+        set +e
+        git -C "$temp_clone" add . >/dev/null 2>&1
+        local add_exit=$?
+        local template_applied="true"
+        if [ $add_exit -ne 0 ]; then
+            template_applied="false"
+            print_error "Failed to stage template files"
+        else
+            git -C "$temp_clone" commit -m "Add $template template" >/dev/null 2>&1
+            local commit_exit=$?
+            if [ $commit_exit -ne 0 ]; then
+                template_applied="false"
+                print_warning "Template files were generated but commit failed. Configure git user.name/user.email and push manually."
+            fi
+        fi
+        set -e
+
+        if [ "$template_applied" = "true" ]; then
+            set +e
+            local push_output
+            push_output=$(git -C "$temp_clone" push 2>&1)
+            local push_exit=$?
+            set -e
+            if [ $push_exit -ne 0 ]; then
+                template_applied="false"
+                print_error "Failed to push template changes"
+                echo "$push_output"
+            fi
+        fi
+
+        rm -rf "$temp_clone"
+        if [ "$template_applied" = "true" ]; then
+            print_success "Template applied"
+        else
+            print_warning "Template changes were not pushed automatically."
+        fi
+    fi
+
+    # Ask about cloning
+    if [ "$should_clone" = "prompt" ]; then
+        echo ""
+        read -p "Clone repository locally? (Y/n): " -r
+        echo ""
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            should_clone="false"
+        else
+            should_clone="true"
+        fi
+    fi
+
+    if [ "$should_clone" = "true" ]; then
+        print_info "Cloning to: ./$repo_name"
+        set +e
+        local clone_output
+        clone_output=$(gh repo clone "$repo_full_name" 2>&1)
+        local clone_exit=$?
+        set -e
+        if [ $clone_exit -eq 0 ]; then
+            print_success "Repository cloned successfully"
+        else
+            print_error "Failed to clone repository"
+            echo "$clone_output"
+        fi
+    fi
+
+    echo ""
+    print_success "Created: $repo_name"
+    if [ -n "$repo_url" ]; then
+        echo "URL: $repo_url"
+    fi
+    if [ "$should_clone" = "true" ] && [ -d "$repo_name" ]; then
+        echo "Local path: ./$repo_name"
+        echo ""
+        echo "Run: cd $repo_name"
+    fi
+    echo ""
 }
 
 # Clone repositories action
@@ -450,23 +2107,129 @@ action_delete() {
     echo ""
 }
 
+# Show interactive menu
+show_menu() {
+    echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║   GitHub Tools - Interactive Menu         ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Check basic dependencies for the menu
+    if ! command -v fzf &> /dev/null; then
+        print_error "fzf is required for interactive mode"
+        echo "Install it using:"
+        echo "  sudo pacman -S fzf"
+        echo "  or"
+        echo "  yay -S fzf"
+        exit 1
+    fi
+
+    # Menu options
+    local options="📋 List repositories
+📦 Clone repositories
+🔄 Sync repositories
+➕ Create repository
+🗑️  Delete repositories
+❓ Help
+🚪 Exit"
+
+    # Show menu with fzf
+    local selected
+    selected=$(echo "$options" | fzf \
+        --height=40% \
+        --border \
+        --layout=reverse \
+        --prompt="Select an option > " \
+        --header="Select what you want to do" \
+        --color='fg:#ffffff,bg:#000000,hl:#00ffff' \
+        --color='fg+:#ffffff,bg+:#333333,hl+:#00ffff' \
+        --color='info:#00ffff,prompt:#00ffff,pointer:#00ffff' \
+        --color='marker:#00ffff,spinner:#00ffff,header:#00ffff' \
+        --no-multi \
+        --no-sort)
+
+    # Process selection
+    case "$selected" in
+        "📋 List repositories")
+            echo ""
+            check_dependencies "list"
+            check_gh_auth
+            action_list
+            ;;
+        "📦 Clone repositories")
+            echo ""
+            check_dependencies "clone"
+            check_gh_auth
+            action_clone
+            ;;
+        "🔄 Sync repositories")
+            echo ""
+            check_dependencies "sync"
+            check_gh_auth
+            action_sync
+            ;;
+        "➕ Create repository")
+            echo ""
+            check_dependencies "create"
+            check_gh_auth
+            action_create
+            ;;
+        "🗑️  Delete repositories")
+            echo ""
+            check_dependencies "delete"
+            check_gh_auth
+            action_delete
+            ;;
+        "❓ Help")
+            echo ""
+            show_usage
+            ;;
+        "🚪 Exit"|"")
+            echo ""
+            print_info "Goodbye!"
+            exit 0
+            ;;
+        *)
+            print_error "Invalid option"
+            exit 1
+            ;;
+    esac
+}
+
 # Main function
 main() {
-    # Check if action is provided
+    # If no arguments provided, show interactive menu
     if [ $# -eq 0 ]; then
-        print_error "No command specified."
-        echo ""
-        show_usage
-        exit 1
+        show_menu
+        exit 0
     fi
 
     local action=$1
 
+    # If arguments provided, use classic command-line interface
     case "$action" in
+        list)
+            check_dependencies "list"
+            check_gh_auth
+            shift  # Remove 'list' from args
+            action_list "$@"
+            ;;
         clone)
             check_dependencies "clone"
             check_gh_auth
             action_clone
+            ;;
+        sync)
+            check_dependencies "sync"
+            check_gh_auth
+            shift  # Remove 'sync' from args
+            action_sync "$@"
+            ;;
+        create)
+            check_dependencies "create"
+            check_gh_auth
+            shift  # Remove 'create' from args
+            action_create "$@"
             ;;
         delete)
             check_dependencies "delete"
