@@ -60,12 +60,13 @@ ${YELLOW}Examples:${NC}
 ${YELLOW}Requirements:${NC}
   - gh (GitHub CLI)
   - fzf (fuzzy finder)
-  - git (for cloning)
+  - git (for cloning and template sync)
+  - jq (JSON formatting for list export)
 
 ${YELLOW}Installation:${NC}
-  sudo pacman -S github-cli fzf git
+  sudo pacman -S github-cli fzf git jq
   or
-  yay -S github-cli fzf git
+  yay -S github-cli fzf git jq
 
 EOF
 }
@@ -83,9 +84,12 @@ check_dependencies() {
         missing_deps+=("fzf")
     fi
 
-    # Git is required for cloning and syncing
-    if [[ "$action" == "clone" || "$action" == "sync" ]] && ! command -v git &> /dev/null; then
+    if [[ "$action" == "clone" || "$action" == "sync" || "$action" == "create" ]] && ! command -v git &> /dev/null; then
         missing_deps+=("git")
+    fi
+
+    if [[ "$action" == "list" ]] && ! command -v jq &> /dev/null; then
+        missing_deps+=("jq")
     fi
 
     if [ ${#missing_deps[@]} -ne 0 ]; then
@@ -95,15 +99,9 @@ check_dependencies() {
         done
         echo ""
         echo "Install them using:"
-        if [[ "$action" == "clone" ]]; then
-            echo "  sudo pacman -S github-cli fzf git"
-            echo "  or"
-            echo "  yay -S github-cli fzf git"
-        else
-            echo "  sudo pacman -S github-cli fzf"
-            echo "  or"
-            echo "  yay -S github-cli fzf"
-        fi
+        echo "  sudo pacman -S github-cli fzf git jq"
+        echo "  or"
+        echo "  yay -S github-cli fzf git jq"
         exit 1
     fi
 }

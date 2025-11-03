@@ -3,7 +3,7 @@
 # GitHub Tools Installation Script
 # This script installs ghtools to ~/scripts
 
-set -e
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -65,6 +65,14 @@ if ! command -v fzf &> /dev/null; then
     missing_deps+=("fzf")
 fi
 
+if ! command -v git &> /dev/null; then
+    missing_deps+=("git")
+fi
+
+if ! command -v jq &> /dev/null; then
+    missing_deps+=("jq")
+fi
+
 if [ ${#missing_deps[@]} -ne 0 ]; then
     print_error "Missing required dependencies:"
     for dep in "${missing_deps[@]}"; do
@@ -72,9 +80,9 @@ if [ ${#missing_deps[@]} -ne 0 ]; then
     done
     echo ""
     echo "Install them using:"
-    echo -e "  ${BLUE}sudo pacman -S github-cli fzf${NC}"
+    echo -e "  ${BLUE}sudo pacman -S github-cli fzf git jq${NC}"
     echo "  or"
-    echo -e "  ${BLUE}yay -S github-cli fzf${NC}"
+    echo -e "  ${BLUE}yay -S github-cli fzf git jq${NC}"
     exit 1
 fi
 
@@ -173,6 +181,7 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 
 # Check if scripts directory is in any config files
+files_with_path=()
 mapfile -t files_with_path < <(check_scripts_in_config_files)
 
 # Check if currently in PATH
@@ -185,7 +194,7 @@ if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
         print_warning "DUPLICATE DETECTED! PATH is configured in multiple files:"
         echo ""
         for file in "${files_with_path[@]}"; do
-            local line_info=$(grep -n "PATH=.*scripts" "$file" 2>/dev/null | head -1)
+            line_info=$(grep -n "PATH=.*scripts" "$file" 2>/dev/null | head -1)
             echo -e "  ${YELLOW}→${NC} $file"
             echo -e "    Line: ${CYAN}$line_info${NC}"
         done
@@ -199,7 +208,7 @@ if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             echo "Select which file to KEEP the PATH configuration:"
             echo ""
-            local i=1
+            i=1
             for file in "${files_with_path[@]}"; do
                 echo -e "  ${GREEN}$i${NC}) $file"
                 ((i++))
@@ -209,8 +218,8 @@ if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
 
             read -p "Enter number: " -r file_choice
 
-            if [ "$file_choice" -ge 1 ] && [ "$file_choice" -le ${#files_with_path[@]} ]; then
-                local keep_file="${files_with_path[$((file_choice-1))]}"
+            if [[ "$file_choice" =~ ^[0-9]+$ ]] && [ "$file_choice" -ge 1 ] && [ "$file_choice" -le ${#files_with_path[@]} ]; then
+                keep_file="${files_with_path[$((file_choice-1))]}"
                 echo ""
                 print_info "Keeping PATH configuration in: $keep_file"
                 echo ""
@@ -254,7 +263,7 @@ else
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 echo "Select which file to KEEP:"
                 echo ""
-                local i=1
+                i=1
                 for file in "${files_with_path[@]}"; do
                     echo -e "  ${GREEN}$i${NC}) $file"
                     ((i++))
@@ -263,8 +272,8 @@ else
 
                 read -p "Enter number: " -r file_choice
 
-                if [ "$file_choice" -ge 1 ] && [ "$file_choice" -le ${#files_with_path[@]} ]; then
-                    local keep_file="${files_with_path[$((file_choice-1))]}"
+                if [[ "$file_choice" =~ ^[0-9]+$ ]] && [ "$file_choice" -ge 1 ] && [ "$file_choice" -le ${#files_with_path[@]} ]; then
+                    keep_file="${files_with_path[$((file_choice-1))]}"
                     echo ""
 
                     for file in "${files_with_path[@]}"; do
