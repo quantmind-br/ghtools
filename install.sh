@@ -74,6 +74,12 @@ if ! command -v jq &> /dev/null; then
     missing_deps+=("jq")
 fi
 
+# Check for optional but recommended dependencies
+optional_deps=()
+if ! command -v gum &> /dev/null; then
+    optional_deps+=("gum")
+fi
+
 if [ ${#missing_deps[@]} -ne 0 ]; then
     print_error "Missing required dependencies:"
     for dep in "${missing_deps[@]}"; do
@@ -81,13 +87,25 @@ if [ ${#missing_deps[@]} -ne 0 ]; then
     done
     echo ""
     echo "Install them using:"
-    echo -e "  ${BLUE}sudo pacman -S github-cli fzf git jq${NC}"
+    echo -e "  ${BLUE}sudo pacman -S github-cli fzf git jq gum${NC}"
     echo "  or"
-    echo -e "  ${BLUE}yay -S github-cli fzf git jq${NC}"
+    echo -e "  ${BLUE}yay -S github-cli fzf git jq gum${NC}"
     exit 1
 fi
 
-print_success "All dependencies are installed"
+print_success "All required dependencies are installed"
+
+# Notify about optional dependencies
+if [ ${#optional_deps[@]} -ne 0 ]; then
+    echo ""
+    print_warning "Optional dependencies for enhanced UI:"
+    for dep in "${optional_deps[@]}"; do
+        echo -e "  ${YELLOW}•${NC} $dep - Beautiful terminal UI components"
+    done
+    echo ""
+    echo -e "Install for best experience: ${CYAN}sudo pacman -S gum${NC}"
+    echo ""
+fi
 
 # Create ~/scripts directory if it doesn't exist
 INSTALL_DIR="$HOME/scripts"

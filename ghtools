@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # ghtools - Unified GitHub repository management tool (Refactored)
-# Version: 3.0.0
-# Requires: gh (GitHub CLI), fzf, jq, git
+# Version: 3.1.0
+# Requires: gh (GitHub CLI), gum, fzf, jq, git
 
 set -euo pipefail
 
 # --- Version ---
-VERSION="3.0.0"
+VERSION="3.1.0"
 
 # --- Default Configuration ---
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ghtools"
@@ -55,7 +55,18 @@ EOF
 
 load_config
 
-# --- Colors ---
+# --- Color Scheme (Modern Purple/Cyan Theme) ---
+# Primary colors
+COLOR_PRIMARY="99"      # Soft purple
+COLOR_SECONDARY="39"    # Cyan
+COLOR_ACCENT="212"      # Pink
+COLOR_SUCCESS="78"      # Green
+COLOR_WARNING="220"     # Yellow/Gold
+COLOR_ERROR="196"       # Red
+COLOR_INFO="75"         # Light blue
+COLOR_MUTED="240"       # Gray
+
+# Legacy colors for compatibility
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -63,13 +74,272 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# --- Gum Style Helpers ---
+
+# Check if gum is available and terminal supports it
+use_gum() {
+  command -v gum &>/dev/null && [[ -t 1 ]]
+}
+
+# Styled text output
+gum_style() {
+  local text="$1"
+  local fg="${2:-$COLOR_PRIMARY}"
+  local bold="${3:-false}"
+
+  if use_gum; then
+    if [[ "$bold" == "true" ]]; then
+      gum style --foreground "$fg" --bold "$text"
+    else
+      gum style --foreground "$fg" "$text"
+    fi
+  else
+    echo "$text"
+  fi
+}
+
 # --- Utility Functions ---
 
-print_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
-print_success() { [[ "$QUIET" == "true" ]] || echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-print_info() { [[ "$QUIET" == "true" ]] || echo -e "${BLUE}[INFO]${NC} $1"; }
-print_warning() { [[ "$QUIET" == "true" ]] || echo -e "${YELLOW}[WARNING]${NC} $1"; }
-print_verbose() { [[ "$VERBOSE" == "true" ]] && echo -e "${CYAN}[DEBUG]${NC} $1" || true; }
+print_error() {
+  if use_gum && [[ "$QUIET" != "true" ]]; then
+    gum style --foreground "$COLOR_ERROR" --bold "✗ ERROR" | tr -d '\n'
+    echo " $1" >&2
+  else
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+  fi
+}
+
+print_success() {
+  [[ "$QUIET" == "true" ]] && return
+  if use_gum; then
+    gum style --foreground "$COLOR_SUCCESS" --bold "✓ SUCCESS" | tr -d '\n'
+    echo " $1"
+  else
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+  fi
+}
+
+print_info() {
+  [[ "$QUIET" == "true" ]] && return
+  if use_gum; then
+    gum style --foreground "$COLOR_INFO" "ℹ INFO" | tr -d '\n'
+    echo " $1"
+  else
+    echo -e "${BLUE}[INFO]${NC} $1"
+  fi
+}
+
+print_warning() {
+  [[ "$QUIET" == "true" ]] && return
+  if use_gum; then
+    gum style --foreground "$COLOR_WARNING" --bold "⚠ WARNING" | tr -d '\n'
+    echo " $1"
+  else
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+  fi
+}
+
+print_verbose() {
+  [[ "$VERBOSE" != "true" ]] && return 0
+  if use_gum; then
+    gum style --foreground "$COLOR_MUTED" "◦ DEBUG" | tr -d '\n'
+    echo " $1"
+  else
+    echo -e "${CYAN}[DEBUG]${NC} $1"
+  fi
+}
+
+# Beautiful header/banner
+show_header() {
+  local title="$1"
+  local subtitle="${2:-}"
+
+  if use_gum; then
+    echo ""
+    if [[ -n "$subtitle" ]]; then
+      gum style \
+        --border rounded \
+        --border-foreground "$COLOR_PRIMARY" \
+        --foreground "$COLOR_SECONDARY" \
+        --align center \
+        --width 60 \
+        --padding "1 2" \
+        --margin "0 2" \
+        "$title" "$subtitle"
+    else
+      gum style \
+        --border rounded \
+        --border-foreground "$COLOR_PRIMARY" \
+        --foreground "$COLOR_SECONDARY" \
+        --align center \
+        --width 60 \
+        --padding "1 2" \
+        --margin "0 2" \
+        "$title"
+    fi
+    echo ""
+  else
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}                    $title${NC}"
+    [[ -n "$subtitle" ]] && echo -e "${CYAN}                    $subtitle${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+  fi
+}
+
+# Section divider
+show_divider() {
+  local title="${1:-}"
+  if use_gum; then
+    if [[ -n "$title" ]]; then
+      gum style --foreground "$COLOR_MUTED" --bold "─── $title ───"
+    else
+      gum style --foreground "$COLOR_MUTED" "────────────────────────────────────────"
+    fi
+  else
+    if [[ -n "$title" ]]; then
+      echo -e "${CYAN}─────────────────────────────────────────────────────────────────${NC}"
+      echo -e "${CYAN}                      $title${NC}"
+      echo -e "${CYAN}─────────────────────────────────────────────────────────────────${NC}"
+    else
+      echo -e "${CYAN}─────────────────────────────────────────────────────────────────${NC}"
+    fi
+  fi
+}
+
+# Spinner for long operations
+run_with_spinner() {
+  local title="$1"
+  shift
+  local cmd="$@"
+
+  if use_gum; then
+    gum spin --spinner dot --spinner.foreground "$COLOR_ACCENT" --title "$title" -- bash -c "$cmd"
+  else
+    echo -n "$title... "
+    if eval "$cmd"; then
+      echo "done"
+    else
+      echo "failed"
+      return 1
+    fi
+  fi
+}
+
+# Interactive confirmation
+gum_confirm() {
+  local prompt="$1"
+  local default="${2:-no}"
+
+  if use_gum; then
+    if [[ "$default" == "yes" ]]; then
+      gum confirm --affirmative "Yes" --negative "No" --default=true \
+        --prompt.foreground "$COLOR_WARNING" "$prompt"
+    else
+      gum confirm --affirmative "Yes" --negative "No" --default=false \
+        --prompt.foreground "$COLOR_WARNING" "$prompt"
+    fi
+  else
+    local response
+    read -p "$prompt [y/N]: " response
+    [[ "$response" =~ ^[Yy]$ ]]
+  fi
+}
+
+# Interactive input
+gum_input() {
+  local placeholder="$1"
+  local prompt="${2:-› }"
+  local default="${3:-}"
+
+  if use_gum; then
+    gum input --placeholder "$placeholder" \
+      --prompt "$prompt" \
+      --prompt.foreground "$COLOR_PRIMARY" \
+      --cursor.foreground "$COLOR_ACCENT" \
+      --value "$default"
+  else
+    local response
+    read -p "$prompt$placeholder: " response
+    echo "${response:-$default}"
+  fi
+}
+
+# Interactive choice
+gum_choose() {
+  local header="$1"
+  shift
+  local options=("$@")
+
+  if use_gum; then
+    printf '%s\n' "${options[@]}" | gum choose \
+      --header "$header" \
+      --cursor "› " \
+      --cursor.foreground "$COLOR_ACCENT" \
+      --header.foreground "$COLOR_PRIMARY" \
+      --selected.foreground "$COLOR_SECONDARY"
+  else
+    printf '%s\n' "${options[@]}" | fzf --header="$header" --height=40%
+  fi
+}
+
+# Interactive filter (fuzzy search)
+gum_filter() {
+  local placeholder="$1"
+  local multi="${2:-false}"
+
+  if use_gum; then
+    local args=(
+      --placeholder "$placeholder"
+      --prompt "› "
+      --prompt.foreground "$COLOR_PRIMARY"
+      --cursor.foreground "$COLOR_ACCENT"
+      --match.foreground "$COLOR_SUCCESS"
+      --indicator "›"
+      --indicator.foreground "$COLOR_ACCENT"
+    )
+    [[ "$multi" == "true" ]] && args+=(--no-limit)
+    gum filter "${args[@]}"
+  else
+    local fzf_args=(--height=50% --border)
+    [[ "$multi" == "true" ]] && fzf_args+=(--multi)
+    fzf "${fzf_args[@]}" --header="$placeholder"
+  fi
+}
+
+# Write/text area input
+gum_write() {
+  local placeholder="$1"
+
+  if use_gum; then
+    gum write --placeholder "$placeholder" \
+      --cursor.foreground "$COLOR_ACCENT" \
+      --header.foreground "$COLOR_PRIMARY" \
+      --char-limit 0
+  else
+    local text
+    echo "$placeholder (Ctrl+D to finish):"
+    text=$(cat)
+    echo "$text"
+  fi
+}
+
+# Table-like output row
+print_table_row() {
+  local col1="$1"
+  local col2="$2"
+  local col1_width="${3:-30}"
+  local col1_color="${4:-$COLOR_SECONDARY}"
+
+  if use_gum; then
+    local styled_col1
+    styled_col1=$(gum style --foreground "$col1_color" "$(printf "%-${col1_width}s" "$col1")")
+    echo "$styled_col1 $col2"
+  else
+    printf "%b%-${col1_width}s%b %s\n" "$CYAN" "$col1" "$NC" "$col2"
+  fi
+}
 
 show_usage() {
     cat <<EOF
@@ -143,19 +413,35 @@ EOF
 
 check_dependencies() {
   local missing_deps=()
+  local optional_deps=()
+
+  # Required dependencies
   for cmd in gh fzf git jq; do
     if ! command -v "$cmd" &>/dev/null; then
       missing_deps+=("$cmd")
     fi
   done
 
+  # Optional but recommended (gum for beautiful UI)
+  if ! command -v gum &>/dev/null; then
+    optional_deps+=("gum")
+  fi
+
   if [ ${#missing_deps[@]} -ne 0 ]; then
     print_error "Missing required dependencies:"
     printf "  - %s\n" "${missing_deps[@]}"
     echo ""
     echo "Install via Arch Linux:"
-    echo "  sudo pacman -S github-cli fzf git jq"
+    echo "  sudo pacman -S github-cli fzf git jq gum"
     exit 1
+  fi
+
+  if [ ${#optional_deps[@]} -ne 0 ]; then
+    print_warning "Optional dependencies missing (for enhanced UI):"
+    printf "  - %s\n" "${optional_deps[@]}"
+    echo ""
+    echo "Install for beautiful UI: sudo pacman -S gum"
+    echo ""
   fi
 }
 
@@ -548,34 +834,81 @@ action_delete() {
 # --- Action: Create (Simplified) ---
 
 action_create() {
-  # Simplificado para brevidade, mas mantendo a lógica core
-  echo -e "${GREEN}Creating new repository${NC}"
+  show_header "CREATE REPOSITORY" "Set up a new GitHub repository"
 
-  read -p "Repository Name: " name
+  # Get repository name
+  local name
+  if use_gum; then
+    name=$(gum input --placeholder "Repository name" \
+      --prompt "› " \
+      --prompt.foreground "$COLOR_PRIMARY" \
+      --cursor.foreground "$COLOR_ACCENT")
+  else
+    read -p "Repository Name: " name
+  fi
+
   if [ -z "$name" ]; then
     print_error "Name required"
     return
   fi
 
-  read -p "Description: " desc
+  # Get description
+  local desc
+  if use_gum; then
+    desc=$(gum input --placeholder "Description (optional)" \
+      --prompt "› " \
+      --prompt.foreground "$COLOR_PRIMARY" \
+      --cursor.foreground "$COLOR_ACCENT")
+  else
+    read -p "Description: " desc
+  fi
 
+  # Select visibility
   local vis
-  vis=$(echo -e "public\nprivate" | fzf --height=10% --prompt="Visibility > ")
+  if use_gum; then
+    vis=$(gum choose --header "Visibility:" \
+      --cursor "› " \
+      --cursor.foreground "$COLOR_ACCENT" \
+      --header.foreground "$COLOR_PRIMARY" \
+      "public" "private")
+  else
+    vis=$(echo -e "public\nprivate" | fzf --height=10% --prompt="Visibility > ")
+  fi
   [ -z "$vis" ] && vis="private"
 
+  # Select template
   local tpl
-  tpl=$(echo -e "none\npython\nnode\ngo" | fzf --height=15% --prompt="Template > ")
+  if use_gum; then
+    tpl=$(gum choose --header "Template:" \
+      --cursor "› " \
+      --cursor.foreground "$COLOR_ACCENT" \
+      --header.foreground "$COLOR_PRIMARY" \
+      "none" "python" "node" "go")
+  else
+    tpl=$(echo -e "none\npython\nnode\ngo" | fzf --height=15% --prompt="Template > ")
+  fi
+
+  # Confirm creation
+  echo ""
+  if use_gum; then
+    gum style --border rounded --border-foreground "$COLOR_SECONDARY" --padding "1 2" \
+      "Repository: $name" "Visibility: $vis" "Template: ${tpl:-none}"
+    echo ""
+  fi
 
   local cmd="gh repo create $name --$vis"
   [ -n "$desc" ] && cmd="$cmd --description \"$desc\""
 
   # Create with clone
+  print_info "Creating repository..."
   if eval "$cmd --clone"; then
-    print_success "Repository created."
+    print_success "Repository created: $name"
     if [ "$tpl" != "none" ] && [ -d "$name" ]; then
+      print_info "Applying template: $tpl"
       apply_template "$name" "$tpl"
       # Auto commit template
-      (cd "$name" && git add . && git commit -m "Initial commit (Template: $tpl)" && git push origin HEAD)
+      (cd "$name" && git add . && git commit -m "Initial commit (Template: $tpl)" && git push origin HEAD) &>/dev/null
+      print_success "Template applied and pushed"
     fi
   else
     print_error "Failed to create repository."
@@ -722,27 +1055,53 @@ action_explore() {
   search_query=$(echo "$search_query" | xargs) # trim
 
   if [ -z "$search_query" ]; then
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}                    🔭 EXPLORE GITHUB                           ${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-    echo ""
-    read -p "Search query: " search_query
+    show_header "EXPLORE GITHUB" "Search repositories worldwide"
+
+    # Get search query
+    if use_gum; then
+      search_query=$(gum input --placeholder "Search query (e.g., 'machine learning')" \
+        --prompt "› " \
+        --prompt.foreground "$COLOR_PRIMARY" \
+        --cursor.foreground "$COLOR_ACCENT")
+    else
+      read -p "Search query: " search_query
+    fi
+
     if [ -z "$search_query" ]; then
       print_error "Search query required"
       return 1
     fi
 
-    echo ""
-    echo "Sort by: (s)tars | (f)orks | (u)pdated | (h)elp-wanted"
-    read -p "Sort [stars]: " sort_choice
-    case "$sort_choice" in
-    f) sort_by="forks" ;;
-    u) sort_by="updated" ;;
-    h) sort_by="help-wanted-issues" ;;
-    *) sort_by="stars" ;;
-    esac
+    # Get sort option
+    if use_gum; then
+      local sort_choice
+      sort_choice=$(gum choose --header "Sort by:" \
+        --cursor "› " \
+        --cursor.foreground "$COLOR_ACCENT" \
+        --header.foreground "$COLOR_PRIMARY" \
+        "stars" "forks" "updated" "help-wanted-issues")
+      sort_by="${sort_choice:-stars}"
+    else
+      echo ""
+      echo "Sort by: (s)tars | (f)orks | (u)pdated | (h)elp-wanted"
+      read -p "Sort [stars]: " sort_choice
+      case "$sort_choice" in
+      f) sort_by="forks" ;;
+      u) sort_by="updated" ;;
+      h) sort_by="help-wanted-issues" ;;
+      *) sort_by="stars" ;;
+      esac
+    fi
 
-    read -p "Filter by language (leave empty for all): " language
+    # Get language filter
+    if use_gum; then
+      language=$(gum input --placeholder "Filter by language (leave empty for all)" \
+        --prompt "› " \
+        --prompt.foreground "$COLOR_PRIMARY" \
+        --cursor.foreground "$COLOR_ACCENT")
+    else
+      read -p "Filter by language (leave empty for all): " language
+    fi
   fi
 
   print_info "Searching GitHub for '$search_query' (sorted by $sort_by)..."
@@ -779,22 +1138,47 @@ action_explore() {
   done <<<"$selected"
 
   echo ""
-  echo -e "${CYAN}Selected ${#repos[@]} repositories:${NC}"
-  printf "  - ${BLUE}%s${NC}\n" "${repos[@]}"
+  if use_gum; then
+    gum style --foreground "$COLOR_SECONDARY" "Selected ${#repos[@]} repositories:"
+    for r in "${repos[@]}"; do
+      gum style --foreground "$COLOR_INFO" "  $r"
+    done
+  else
+    echo -e "${CYAN}Selected ${#repos[@]} repositories:${NC}"
+    printf "  - ${BLUE}%s${NC}\n" "${repos[@]}"
+  fi
   echo ""
-  echo -e "${YELLOW}Actions:${NC}"
-  echo "  (c) Clone          - Clone to local machine"
-  echo "  (f) Fork           - Fork to your account"
-  echo "  (F) Fork + Clone   - Fork and clone"
-  echo "  (b) Browse         - Open in browser"
-  echo "  (s) Star           - Star the repository"
-  echo "  (i) Info           - Show detailed info"
-  echo "  (q) Quit           - Cancel"
-  echo ""
-  read -p "Action: " action
+
+  local action
+  if use_gum; then
+    action=$(gum choose \
+      --header "Select action:" \
+      --cursor "› " \
+      --cursor.foreground "$COLOR_ACCENT" \
+      --header.foreground "$COLOR_PRIMARY" \
+      --selected.foreground "$COLOR_SECONDARY" \
+      "Clone - Clone to local machine" \
+      "Fork - Fork to your account" \
+      "Fork + Clone - Fork and clone" \
+      "Browse - Open in browser" \
+      "Star - Star the repository" \
+      "Info - Show detailed info" \
+      "Cancel")
+  else
+    echo -e "${YELLOW}Actions:${NC}"
+    echo "  (c) Clone          - Clone to local machine"
+    echo "  (f) Fork           - Fork to your account"
+    echo "  (F) Fork + Clone   - Fork and clone"
+    echo "  (b) Browse         - Open in browser"
+    echo "  (s) Star           - Star the repository"
+    echo "  (i) Info           - Show detailed info"
+    echo "  (q) Quit           - Cancel"
+    echo ""
+    read -p "Action: " action
+  fi
 
   case "$action" in
-  c)
+  c|"Clone"*)
     for repo in "${repos[@]}"; do
       print_info "Cloning $repo..."
       if gh repo clone "$repo" 2>/dev/null; then
@@ -804,7 +1188,7 @@ action_explore() {
       fi
     done
     ;;
-  f)
+  f|"Fork - Fork"*)
     for repo in "${repos[@]}"; do
       print_info "Forking $repo..."
       if gh repo fork "$repo" --clone=false 2>/dev/null; then
@@ -814,7 +1198,7 @@ action_explore() {
       fi
     done
     ;;
-  F)
+  F|"Fork + Clone"*)
     for repo in "${repos[@]}"; do
       print_info "Forking and cloning $repo..."
       if gh repo fork "$repo" --clone=true 2>/dev/null; then
@@ -824,14 +1208,14 @@ action_explore() {
       fi
     done
     ;;
-  b)
+  b|"Browse"*)
     for repo in "${repos[@]}"; do
       print_info "Opening $repo in browser..."
       gh browse -R "$repo" 2>/dev/null &
     done
     print_success "Opened in browser"
     ;;
-  s)
+  s|"Star"*)
     for repo in "${repos[@]}"; do
       print_info "Starring $repo..."
       if gh api -X PUT "user/starred/$repo" 2>/dev/null; then
@@ -841,18 +1225,19 @@ action_explore() {
       fi
     done
     ;;
-  i)
+  i|"Info"*)
     for repo in "${repos[@]}"; do
-      echo ""
-      echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-      echo -e "${GREEN}$repo${NC}"
-      echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+      show_header "$repo" "Repository Details"
       gh repo view "$repo" 2>/dev/null || print_error "Failed to fetch info"
       echo ""
-      read -p "Press Enter to continue..."
+      if use_gum; then
+        gum confirm "Continue?" --affirmative "OK" --negative "" --default=true || true
+      else
+        read -p "Press Enter to continue..."
+      fi
     done
     ;;
-  q | *)
+  q|"Cancel"*|*)
     print_info "Cancelled"
     ;;
   esac
@@ -881,10 +1266,7 @@ action_trending() {
     esac
   done
 
-  echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-  echo -e "${CYAN}                    🔥 TRENDING REPOSITORIES                    ${NC}"
-  echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-  echo ""
+  show_header "TRENDING REPOSITORIES" "Hot projects this week"
 
   local query="stars:>100 pushed:>$(date -d '7 days ago' '+%Y-%m-%d' 2>/dev/null || date -v-7d '+%Y-%m-%d')"
   [ -n "$language" ] && query="$query language:$language"
@@ -916,29 +1298,48 @@ action_trending() {
   done <<<"$selected"
 
   echo ""
-  echo "Actions: (c)lone | (f)ork | (b)rowse | (s)tar | (q)uit"
-  read -p "Action: " action
+  local action
+  if use_gum; then
+    action=$(gum choose \
+      --header "Select action:" \
+      --cursor "› " \
+      --cursor.foreground "$COLOR_ACCENT" \
+      --header.foreground "$COLOR_PRIMARY" \
+      --selected.foreground "$COLOR_SECONDARY" \
+      "Clone - Clone to local machine" \
+      "Fork - Fork to your account" \
+      "Browse - Open in browser" \
+      "Star - Star the repository" \
+      "Cancel")
+  else
+    echo "Actions: (c)lone | (f)ork | (b)rowse | (s)tar | (q)uit"
+    read -p "Action: " action
+  fi
 
   case "$action" in
-  c)
+  c|"Clone"*)
     for repo in "${repos[@]}"; do
       gh repo clone "$repo" 2>/dev/null && print_success "Cloned: $repo" || print_error "Failed: $repo"
     done
     ;;
-  f)
+  f|"Fork"*)
     for repo in "${repos[@]}"; do
       gh repo fork "$repo" --clone=false 2>/dev/null && print_success "Forked: $repo" || print_error "Failed: $repo"
     done
     ;;
-  b)
+  b|"Browse"*)
     for repo in "${repos[@]}"; do
       gh browse -R "$repo" 2>/dev/null &
     done
+    print_success "Opened in browser"
     ;;
-  s)
+  s|"Star"*)
     for repo in "${repos[@]}"; do
       gh api -X PUT "user/starred/$repo" 2>/dev/null && print_success "Starred: $repo" || print_error "Failed: $repo"
     done
+    ;;
+  q|"Cancel"*|*)
+    print_info "Cancelled"
     ;;
   esac
 }
@@ -1029,11 +1430,7 @@ action_stats() {
   local json
   json=$(fetch_repositories_json "true")
 
-  echo ""
-  echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-  echo -e "${CYAN}                    📊 REPOSITORY STATISTICS                    ${NC}"
-  echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-  echo ""
+  show_header "REPOSITORY STATISTICS" "Your GitHub Overview"
 
   local total public private archived
   total=$(echo "$json" | jq 'length')
@@ -1041,10 +1438,17 @@ action_stats() {
   private=$(echo "$json" | jq '[.[] | select(.visibility == "PRIVATE")] | length')
   archived=$(echo "$json" | jq '[.[] | select(.isArchived == true)] | length')
 
-  echo -e "  ${GREEN}Total Repositories:${NC}  $total"
-  echo -e "  ${GREEN}Public:${NC}              $public"
-  echo -e "  ${YELLOW}Private:${NC}             $private"
-  echo -e "  ${CYAN}Archived:${NC}            $archived"
+  if use_gum; then
+    # Build stats box with gum
+    local stats_content
+    stats_content=$(printf "Total Repositories:  %s\nPublic:              %s\nPrivate:             %s\nArchived:            %s" "$total" "$public" "$private" "$archived")
+    gum style --border rounded --border-foreground "$COLOR_SECONDARY" --padding "1 2" --margin "0 2" "$stats_content"
+  else
+    echo -e "  ${GREEN}Total Repositories:${NC}  $total"
+    echo -e "  ${GREEN}Public:${NC}              $public"
+    echo -e "  ${YELLOW}Private:${NC}             $private"
+    echo -e "  ${CYAN}Archived:${NC}            $archived"
+  fi
   echo ""
 
   local total_stars total_forks total_size
@@ -1053,51 +1457,80 @@ action_stats() {
   total_size=$(echo "$json" | jq '[.[].diskUsage] | add // 0')
   local size_mb=$((total_size / 1024))
 
-  echo -e "  ${YELLOW}⭐ Total Stars:${NC}       $total_stars"
-  echo -e "  ${BLUE}🍴 Total Forks:${NC}       $total_forks"
-  echo -e "  ${CYAN}💾 Total Size:${NC}        ${size_mb} MB"
+  if use_gum; then
+    local metrics_content
+    metrics_content=$(printf "Total Stars:   %s\nTotal Forks:   %s\nTotal Size:    %s MB" "$total_stars" "$total_forks" "$size_mb")
+    gum style --border rounded --border-foreground "$COLOR_ACCENT" --padding "1 2" --margin "0 2" "$metrics_content"
+  else
+    echo -e "  ${YELLOW}⭐ Total Stars:${NC}       $total_stars"
+    echo -e "  ${BLUE}🍴 Total Forks:${NC}       $total_forks"
+    echo -e "  ${CYAN}💾 Total Size:${NC}        ${size_mb} MB"
+  fi
   echo ""
 
-  echo -e "${CYAN}─────────────────────────────────────────────────────────────────${NC}"
-  echo -e "${CYAN}                      Languages Breakdown                        ${NC}"
-  echo -e "${CYAN}─────────────────────────────────────────────────────────────────${NC}"
+  show_divider "Languages Breakdown"
+  echo ""
+
+  local lang_data
+  lang_data=$(echo "$json" | jq -r '
+    [.[] | .primaryLanguage.name // "Unknown"] |
+    group_by(.) |
+    map({lang: .[0], count: length}) |
+    sort_by(-.count) |
+    .[:10] |
+    .[] |
+    "\(.lang): \(.count)"
+  ')
+
+  if use_gum; then
+    echo "$lang_data" | while read -r line; do
+      gum style --foreground "$COLOR_SECONDARY" "  $line"
+    done
+  else
+    echo "$lang_data" | sed 's/^/  /'
+  fi
+  echo ""
+
+  show_divider "Top Repositories (by Stars)"
   echo ""
 
   echo "$json" | jq -r '
-    [.[] | .primaryLanguage.name // "Unknown"] | 
-    group_by(.) | 
-    map({lang: .[0], count: length}) | 
-    sort_by(-.count) | 
-    .[:10] | 
-    .[] | 
-    "  \(.lang): \(.count)"
-  '
+    sort_by(-.stargazerCount) |
+    .[:5] |
+    .[] |
+    "  \(.stargazerCount)\t\(.nameWithOwner)"
+  ' | while IFS=$'\t' read -r stars name; do
+    if use_gum; then
+      local star_styled
+      star_styled=$(gum style --foreground "$COLOR_WARNING" "$stars")
+      local name_styled
+      name_styled=$(gum style --foreground "$COLOR_SECONDARY" "$name")
+      echo "$star_styled $name_styled"
+    else
+      printf "  %-6s %s\n" "$stars" "$name"
+    fi
+  done
   echo ""
 
-  echo -e "${CYAN}─────────────────────────────────────────────────────────────────${NC}"
-  echo -e "${CYAN}                      Top Repositories (by ⭐)                   ${NC}"
-  echo -e "${CYAN}─────────────────────────────────────────────────────────────────${NC}"
-  echo ""
-
-  echo "$json" | jq -r '
-    sort_by(-.stargazerCount) | 
-    .[:5] | 
-    .[] | 
-    "  ⭐ \(.stargazerCount)\t\(.nameWithOwner)"
-  ' | column -t -s $'\t'
-  echo ""
-
-  echo -e "${CYAN}─────────────────────────────────────────────────────────────────${NC}"
-  echo -e "${CYAN}                   Recently Updated (last 5)                     ${NC}"
-  echo -e "${CYAN}─────────────────────────────────────────────────────────────────${NC}"
+  show_divider "Recently Updated (last 5)"
   echo ""
 
   echo "$json" | jq -r '
     sort_by(.updatedAt) | reverse |
-    .[:5] | 
-    .[] | 
-    "  \(.updatedAt[:10])\t\(.nameWithOwner)"
-  ' | column -t -s $'\t'
+    .[:5] |
+    .[] |
+    "\(.updatedAt[:10])\t\(.nameWithOwner)"
+  ' | while IFS=$'\t' read -r date name; do
+    if use_gum; then
+      local date_styled
+      date_styled=$(gum style --foreground "$COLOR_MUTED" "$date")
+      local name_styled
+      name_styled=$(gum style --foreground "$COLOR_SECONDARY" "$name")
+      echo "  $date_styled $name_styled"
+    else
+      printf "  %-12s %s\n" "$date" "$name"
+    fi
+  done
   echo ""
 }
 
@@ -1122,14 +1555,35 @@ action_search() {
   [ -z "$selected" ] && return
 
   echo ""
-  echo -e "${CYAN}Selected repositories:${NC}"
-  while IFS=$'\t' read -r repo desc vis lang; do
-    echo -e "  ${BLUE}$repo${NC} [$vis] ($lang)"
-  done <<<"$selected"
+  if use_gum; then
+    gum style --foreground "$COLOR_SECONDARY" "Selected repositories:"
+    while IFS=$'\t' read -r repo desc vis lang; do
+      gum style --foreground "$COLOR_INFO" "  $repo [$vis] ($lang)"
+    done <<<"$selected"
+  else
+    echo -e "${CYAN}Selected repositories:${NC}"
+    while IFS=$'\t' read -r repo desc vis lang; do
+      echo -e "  ${BLUE}$repo${NC} [$vis] ($lang)"
+    done <<<"$selected"
+  fi
 
   echo ""
-  echo "Actions: (c)lone | (b)rowse | (d)elete | (q)uit"
-  read -p "Action: " action
+  local action
+  if use_gum; then
+    action=$(gum choose \
+      --header "Select action:" \
+      --cursor "› " \
+      --cursor.foreground "$COLOR_ACCENT" \
+      --header.foreground "$COLOR_PRIMARY" \
+      --selected.foreground "$COLOR_SECONDARY" \
+      "Clone - Clone to local machine" \
+      "Browse - Open in browser" \
+      "Delete - Delete repositories" \
+      "Cancel")
+  else
+    echo "Actions: (c)lone | (b)rowse | (d)elete | (q)uit"
+    read -p "Action: " action
+  fi
 
   local repos=()
   while IFS=$'\t' read -r repo _ _ _; do
@@ -1137,24 +1591,38 @@ action_search() {
   done <<<"$selected"
 
   case "$action" in
-  c)
+  c|"Clone"*)
     for repo in "${repos[@]}"; do
       gh repo clone "$repo" &>/dev/null && print_success "Cloned: $repo" || print_error "Failed: $repo"
     done
     ;;
-  b)
+  b|"Browse"*)
     for repo in "${repos[@]}"; do
       gh browse -R "$repo" 2>/dev/null &
     done
+    print_success "Opened in browser"
     ;;
-  d)
+  d|"Delete"*)
     print_warning "Delete selected repos? This is NOT reversible!"
-    read -p "Type 'DELETE' to confirm: " confirm
+    local confirm
+    if use_gum; then
+      confirm=$(gum input --placeholder "Type DELETE to confirm" \
+        --prompt "› " \
+        --prompt.foreground "$COLOR_ERROR" \
+        --cursor.foreground "$COLOR_ERROR")
+    else
+      read -p "Type 'DELETE' to confirm: " confirm
+    fi
     if [ "$confirm" = "DELETE" ]; then
       for repo in "${repos[@]}"; do
         gh repo delete "$repo" --yes 2>/dev/null && print_success "Deleted: $repo" || print_error "Failed: $repo"
       done
+    else
+      print_info "Cancelled"
     fi
+    ;;
+  q|"Cancel"*|*)
+    print_info "Cancelled"
     ;;
   esac
 }
@@ -1427,7 +1895,53 @@ action_status() {
 # --- Main Menu ---
 
 show_menu() {
-  local options="📋 List Repositories
+  # Show beautiful header
+  if use_gum; then
+    clear
+    gum style \
+      --border rounded \
+      --border-foreground "$COLOR_PRIMARY" \
+      --foreground "$COLOR_SECONDARY" \
+      --align center \
+      --width 50 \
+      --padding "1 2" \
+      --margin "1 0" \
+      "GHTOOLS" "GitHub Repository Manager v$VERSION"
+    echo ""
+  fi
+
+  local options=(
+    "List Repositories"
+    "Search My Repos"
+    "Explore GitHub"
+    "Trending Repos"
+    "Statistics Dashboard"
+    "Clone Repositories"
+    "Sync Local Repos"
+    "Local Repo Status"
+    "Fork Repository"
+    "Create Repository"
+    "Delete Repositories"
+    "Archive/Unarchive"
+    "Change Visibility"
+    "Browse in Browser"
+    "Pull Requests"
+    "Config"
+    "Refresh Cache"
+    "Exit"
+  )
+
+  local choice
+  if use_gum; then
+    choice=$(printf '%s\n' "${options[@]}" | gum choose \
+      --cursor "› " \
+      --cursor.foreground "$COLOR_ACCENT" \
+      --header "Select an action:" \
+      --header.foreground "$COLOR_PRIMARY" \
+      --selected.foreground "$COLOR_SECONDARY" \
+      --height 20)
+  else
+    local options_legacy="📋 List Repositories
 🔍 Search My Repos
 🔭 Explore GitHub
 🔥 Trending Repos
@@ -1445,9 +1959,8 @@ show_menu() {
 ⚙️  Config
 🔄 Refresh Cache
 🚪 Exit"
-
-  local choice
-  choice=$(echo "$options" | fzf --height=55% --border --header="GitHub Tools v$VERSION" --layout=reverse)
+    choice=$(echo "$options_legacy" | fzf --height=55% --border --header="GitHub Tools v$VERSION" --layout=reverse)
+  fi
 
   case "$choice" in
   *"List"*) action_list ;;
