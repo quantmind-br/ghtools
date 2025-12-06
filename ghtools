@@ -646,7 +646,7 @@ action_clone() {
     (
       local repo_name
       repo_name=$(basename "$repo")
-      local target_dir="$clone_path/$repo_name"
+      local target_dir="${clone_path}/${repo_name}"
       
       if [ -d "$target_dir" ]; then
         print_warning "Skipped $repo (Directory exists)"
@@ -660,8 +660,6 @@ action_clone() {
       fi
     ) &
     ((current++)) || true
-    # Progress indicator
-    printf "\r${CYAN}[PROGRESS]${NC} %d/%d repositories queued..." "$current" "$total" >&2
   done
   wait
   echo "" >&2
@@ -2140,4 +2138,7 @@ main() {
   esac
 }
 
-main "$@"
+# Only execute main if this script is being run directly (not sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

@@ -1,19 +1,45 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-The CLI entry point lives in `ghtools`, a Bash script that wires the interactive menu, direct subcommands, and all helper functions. Installation automation and PATH hygiene are handled in `install.sh`. Supporting docs and product specs sit under `PRPs/` and `SPEC_PRP/`; keep internal planning material there rather than alongside the executable script. There is no compiled output or build artifact committed to the repo—new assets should follow the same convention.
+## Project Structure & Architecture
+The project is a **Monolithic Bash CLI script** (`ghtools`) acting as an **Orchestrator** for external tools. It uses a Command Dispatcher pattern to route CLI arguments to `action_*` functions. Core data flow involves: `gh` (API) -> `jq` (Transform) -> `fzf`/`gum` (UI/Select).
+
+**Key Components:**
+*   `ghtools`: Main executable, handles routing and core logic.
+*   `fetch_repositories_json`: Manages the local repository cache (`$CACHE_FILE`).
+*   `run_parallel_jobs`: Utility for concurrent execution (e.g., cloning, syncing).
+*   `print_*`: Functions for consistent, styled terminal output.
 
 ## Build, Test, and Development Commands
-Run `./install.sh` to copy the CLI into `~/scripts` and ensure PATH hooks stay deduplicated. Use `./ghtools help` or `./ghtools list --help` while developing to verify argument parsing. Lint changes locally with `shellcheck ghtools` and `shellcheck install.sh`; resolve warnings before opening a PR. When iterating on command flows, call `./ghtools sync --dry-run --path <dir>` or `./ghtools delete` inside a sandbox repo to validate prompts without mutating production repositories.
+The script requires no compilation. Dependencies: `gh`, `jq`, `fzf`, `git`.
+
+| Task | Command | Notes |
+| :--- | :--- | :--- |
+| **Install** | `bash install.sh` | Copies `ghtools` to `~/scripts` and updates PATH. |
+| **Run** | `./ghtools` | Executes the interactive menu. |
+| **Lint** | `shellcheck ghtools` | **Required** before any commit. |
+| **Test** | `bats test/` | Runs the BATS test suite. |
+| **Dry-Run Sync** | `./ghtools sync --dry-run` | Use for safe validation of sync logic. |
 
 ## Coding Style & Naming Conventions
-Scripts are POSIX-friendly but assume Bash; keep `#!/bin/bash` and `set -euo pipefail` at the top of new modules. Indent with four spaces, prefer snake_case for functions (`check_dependencies`) and ALL_CAPS for constants (color codes, paths). Echo user-facing messages through the provided `print_*` helpers so color formatting stays consistent. When adding flags, mirror the existing long-option style (`--dry-run`, `--max-depth`) and document them in both `show_usage` and the README.
+*   **Strict Mode**: All scripts must start with `set -euo pipefail`.
+*   **Indentation**: Use **4 spaces**.
+*   **Naming**: `snake_case` for functions (`action_clone`), `ALL_CAPS` for constants (`MAX_JOBS`, `CACHE_TTL`).
+*   **Output**: Use `print_info`, `print_success`, `print_error` helpers for all user-facing messages.
+*   **Data**: Use `jq` for all JSON parsing and manipulation of `gh` output.
 
 ## Testing Guidelines
-There is no automated test harness yet, so exercise new logic manually with `gh auth status` confirmed and a GitHub test account when possible. Validate list/clone/sync flows against repositories with varied visibility to catch edge cases, and always include a `--dry-run` pathway for destructive commands. If a feature depends on GitHub scopes (e.g., `delete_repo`), add an explicit check similar to `check_delete_scope` and describe the requirement in the README update.
+Testing is primarily manual and via the BATS suite.
+1.  Verify `gh auth status` is successful before testing.
+2.  Always test destructive commands (`delete`, `archive`) in a sandbox environment and ensure the `check_delete_scope` and confirmation prompts are working.
+3.  Validate parallel operations (`clone`, `sync`) respect the `MAX_JOBS` limit.
+4.  Ensure the cache is correctly invalidated (`rm -f $CACHE_FILE`) after write operations.
 
-## Commit & Pull Request Guidelines
-Commit messages follow a `Type: concise summary` pattern (see `Refactor: Replace ghclone and ghdelete with unified ghtools`). Keep subject lines under 72 characters and wrap additional context in the body when needed. Squash cosmetic commits before pushing. Pull requests should link related issues, summarize verification steps (`shellcheck`, manual command matrix), and note any auth scopes or environment impacts. Include screenshots or terminal captures only when they clarify interactive changes; otherwise reference exact commands exercised.
+## Git Workflows
+*   **Commit Format**: `Type: concise summary` (e.g., `Feat: Add --lang filter to list command`). Keep subject under 72 chars.
+*   **PR Process**: Squash cosmetic commits. Link related issues. Summarize verification steps, including `shellcheck` results and manual command matrix.
 
 ## Security & Configuration Notes
-Authenticate early with `gh auth login` and refresh scopes via `gh auth refresh -s delete_repo` before testing deletion. Avoid hardcoding tokens or organization names; pass them through existing prompts or environment variables. When adding filesystem writes, respect the current `$HOME/scripts` install target and warn users before creating or overwriting files outside that directory.
+*   **Authentication**: Must be handled by `gh auth login`. Sensitive actions require refreshing scopes: `gh auth refresh -s delete_repo`.
+*   **Configuration**: Settings are loaded from `~/.config/ghtools/config`. Variables like `CACHE_TTL` and `MAX_JOBS` control runtime behavior.
+*   **Safety**: `action_sync` must use `git pull --ff-only` to prevent non-fast-forward merges.
+*   **Cache**: The cache file is secured with `umask 077` (permissions 600).

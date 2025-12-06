@@ -1,0 +1,49 @@
+---
+description: Defines Bash scripting best practices, function naming, and state management conventions specific to the ghtools script.
+globs:
+  - "ghtools"
+alwaysApply: false
+---
+
+# Bash Scripting Conventions and Best Practices
+
+This rule set applies to the main 'ghtools' Bash script and its internal functions.
+
+## 1. Script Safety and Error Handling
+
+The script must maintain high safety standards to prevent unexpected behavior.
+
+*   **Rule:** The script must start with `set -euo pipefail`. This ensures:
+    *   `e`: Exit immediately if a command exits with a non-zero status.
+    *   `u`: Treat unset variables as an error.
+    *   `o pipefail`: Ensure pipelines fail if any command in the pipe fails.
+*   **Rule:** Always check the exit status (`$?`) of external commands (`gh`, `git`) and use `print_error` for reporting failures.
+
+## 2. Function Naming and Purpose
+
+Functions are categorized by their purpose:
+
+| Prefix | Purpose | Example |
+| :--- | :--- | :--- |
+| `action_` | Core command handlers | `action_clone`, `action_sync` |
+| `print_` | Standardized output/logging | `print_error`, `print_info` |
+| `check_` | Validation and dependency checks | `check_dependencies`, `check_gh_auth` |
+| `get_` | Data retrieval/calculation | `get_all_repos`, `get_repo_status` |
+
+*   **Rule:** All variables within functions must be declared with `local` unless they are explicitly intended to modify a global state variable (e.g., `VERBOSE`, `QUIET`).
+
+## 3. Parallel Execution Pattern
+
+For bulk operations (`clone`, `sync`), use the `run_parallel_jobs` function to manage concurrency.
+
+*   **Pattern:**
+    1.  Generate a list of commands to execute.
+    2.  Pipe this list to `run_parallel_jobs`.
+*   **Constraint:** The maximum number of concurrent jobs is controlled by the global variable `$MAX_JOBS` (default 5). Do not bypass this limit.
+
+## 4. Configuration and Global State
+
+Configuration variables are loaded globally via `load_config` from `$CONFIG_FILE`.
+
+*   **Global Variables:** `CACHE_TTL`, `MAX_JOBS`, `DEFAULT_ORG`, `VERBOSE`, `QUIET`.
+*   **Rule:** Do not define new global configuration variables directly in the script. If a new setting is needed, it must be added to the `init_config` defaults and validated in `load_config`. The `load_config` function's security check must be respected.

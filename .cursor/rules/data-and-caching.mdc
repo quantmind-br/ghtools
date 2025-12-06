@@ -1,0 +1,40 @@
+---
+description: Details the data flow pipeline, the use of jq for transformation, and the cache management strategy.
+globs:
+  - "ghtools"
+alwaysApply: false
+---
+
+# Data Flow, Caching, and Transformation
+
+This rule set governs how repository data is fetched, processed, and cached within the application.
+
+## 1. Repository Data Source and Contract
+
+The single source of truth for repository data is the `get_all_repos` function, which manages the cache.
+
+*   **Data Contract:** Repository data must conform to the JSON structure returned by `gh repo list --json`, specifically extracting fields like `nameWithOwner`, `description`, `isArchived`, and `stargazerCount`.
+*   **Rule:** When modifying data retrieval, ensure the `jq` filter in `fetch_repositories_json` is updated to maintain the expected fields for downstream functions.
+
+## 2. Data Transformation Pipeline
+
+Data is transformed using `jq` for filtering and projection, and then often serialized for shell processing.
+
+*   **JSON to TSV:** For piping data to `fzf` or processing in a `while read` loop, use `jq -r '... | @tsv'` to serialize the JSON array into tab-separated values.
+*   **Shell Processing:** When reading TSV data, always use the robust pattern: `while IFS=$'\t' read -r <VAR1> <VAR2> ...; do ... done`.
+
+## 3. Caching Strategy (Cache-Aside)
+
+The application uses a time-to-live (TTL) cache to minimize GitHub API calls.
+
+*   **Cache Manager:** The `fetch_repositories_json` function is responsible for all cache interactions.
+*   **TTL:** The cache is considered valid if its age is less than the global variable `$CACHE_TTL` (default 600 seconds).
+*   **Security:** When writing to `$CACHE_FILE`, the script must ensure secure permissions (600) by using `umask 077` before the write operation.
+
+## 4. Cache Invalidation
+
+To ensure data consistency, the cache must be explicitly invalidated after any remote write operation.
+
+*   **Rule:** After executing any action that modifies the remote state (e.g., `action_create`, `action_delete`, `action_archive`, `action_visibility`), the script **must** execute `rm -f "$CACHE_FILE"` to force a refresh on the next read operation.
+*   **Exception:** Read-only operations (`list`, `search`, `stats`) rely on the TTL mechanism.
+*   **Sensitive Operations:** The `action_delete` function requires an explicit `check_delete_scope` authorization check before proceeding.

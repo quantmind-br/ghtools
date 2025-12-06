@@ -7,11 +7,8 @@ setup() {
     local project_dir
     project_dir="$(dirname "$(dirname "$(dirname "$test_file")")")"
 
-    # Load test helper (this sets up test environment variables)
+    # Load test helper (this sets up test environment variables and loads ghtools)
     source "$project_dir/test/test_helper.bash"
-
-    # Load ghtools functions (without main)
-    source "$project_dir/ghtools_functions.sh"
 }
 
 teardown() {

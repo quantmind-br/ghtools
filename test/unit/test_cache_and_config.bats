@@ -50,7 +50,8 @@ load '../test_helper.bash'
 @test "load_config respects XDG_CONFIG_HOME" {
     export XDG_CONFIG_HOME="$TEST_TMP_DIR/custom_config"
     mkdir -p "$XDG_CONFIG_HOME/ghtools"
-    echo 'CUSTOM_VAR="custom_value"' > "$XDG_CONFIG_HOME/ghtools/config"
+    # Use a valid config variable
+    echo 'MAX_JOBS=8' > "$XDG_CONFIG_HOME/ghtools/config"
 
     # Reload to pick up new config dir
     CONFIG_DIR="${XDG_CONFIG_HOME}/ghtools"
@@ -93,8 +94,8 @@ EOF
 @test "is_cache_valid respects CACHE_TTL setting" {
     export CACHE_TTL=60  # 1 minute
     echo '{}' > "$TEST_CACHE_FILE"
-    # File is 1 minute old, should be invalid
-    touch -t 202412010100 "$TEST_CACHE_FILE"
+    # File is 2 minutes old, should be invalid
+    touch -d "2 minutes ago" "$TEST_CACHE_FILE"
 
     run is_cache_valid
     [ "$status" -eq 1 ]
@@ -103,8 +104,8 @@ EOF
 @test "is_cache_valid accepts fresh cache" {
     export CACHE_TTL=3600  # 1 hour
     echo '{}' > "$TEST_CACHE_FILE"
-    # File is 30 minutes old, should be valid
-    touch -t 202412010030 "$TEST_CACHE_FILE"
+    # File is fresh (just created), should be valid
+    touch "$TEST_CACHE_FILE"
 
     run is_cache_valid
     [ "$status" -eq 0 ]

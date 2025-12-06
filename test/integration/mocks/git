@@ -1,8 +1,26 @@
 #!/bin/bash
 case "$1" in
     "init")
-        mkdir -p "$2/.git"
-        echo "Initialized empty Git repository in $2/.git/"
+        # Handle git init with or without -q flag
+        # git init -q (init in current dir, quiet)
+        # git init <dir> (init in specified dir)
+        # git init -q <dir> (init in specified dir, quiet)
+        local dir=""
+        shift  # skip "init"
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                -q|--quiet) shift ;;  # ignore quiet flag
+                *) dir="$1"; shift ;;
+            esac
+        done
+        # If no dir specified, use current directory
+        if [[ -z "$dir" ]]; then
+            mkdir -p ".git"
+            echo "Initialized empty Git repository in .git/"
+        else
+            mkdir -p "$dir/.git"
+            echo "Initialized empty Git repository in $dir/.git/"
+        fi
         exit 0
         ;;
     "add")

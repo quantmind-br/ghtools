@@ -5,13 +5,13 @@
 
 # Get the directory where this script is located
 TEST_DIR="$(cd "$(dirname "${BATS_TEST_FILENAME}")" && pwd)"
-PROJECT_DIR="$(cd "${TEST_DIR}/.." && pwd)"
+PROJECT_DIR="$(cd "${TEST_DIR}/../.." && pwd)"
 
 # Enable test mode to prevent auto-execution and strict mode issues
 export GHTOOLS_TEST_MODE=1
 
-# Source the ghtools functions (test mode prevents main execution)
-source "${PROJECT_DIR}/ghtools_functions.sh" 2>/dev/null || true
+# Source the ghtools script directly (it now supports being sourced)
+source "${PROJECT_DIR}/ghtools"
 export -f load_config 2>/dev/null || true
 export -f init_config 2>/dev/null || true
 export -f use_gum 2>/dev/null || true
@@ -82,8 +82,10 @@ mkdir -p "$TEST_CONFIG_DIR"
 export MOCK_DIR="${TEST_DIR}/mocks"
 mkdir -p "$MOCK_DIR"
 
-# Make mocks executable
-chmod +x "$MOCK_DIR"/*
+# Make mocks executable (if any exist)
+if [ -d "$MOCK_DIR" ] && [ "$(ls -A "$MOCK_DIR" 2>/dev/null)" ]; then
+    chmod +x "$MOCK_DIR"/*
+fi
 
 # Function to create a temporary git repository for testing
 create_test_git_repo() {
@@ -148,15 +150,59 @@ case "$1" in
             echo "github.com
   Logged in to github.com as user (oauth_token)
   Git operations done over the http on api.github.com
-  Active user: user"
+  Active user: user
+  Token scopes: delete_repo, repo, read:org, gist"
+            exit 0
+        fi
+        if [ "$2" = "refresh" ]; then
+            # Mock auth refresh
+            echo "Auth refreshed"
             exit 0
         fi
         ;;
     "repo")
         case "$2" in
             "list")
-                if [ "$3" = "--limit" ]; then
-                    # Output mock repository data
+                # Check if --json flag is present
+                if [[ "$*" == *"--json"* ]]; then
+                    # Output mock JSON data
+                    cat <<'JSON_DATA'
+[
+  {
+    "name": "test-repo",
+    "nameWithOwner": "user/test-repo",
+    "description": "A test repository",
+    "visibility": "PUBLIC",
+    "primaryLanguage": {"name": "bash"},
+    "stargazerCount": 10,
+    "forkCount": 2,
+    "diskUsage": 100,
+    "updatedAt": "2024-01-01T00:00:00Z",
+    "createdAt": "2024-01-01T00:00:00Z",
+    "isArchived": false,
+    "url": "https://github.com/user/test-repo",
+    "sshUrl": "git@github.com:user/test-repo.git"
+  },
+  {
+    "name": "private-repo",
+    "nameWithOwner": "user/private-repo",
+    "description": "A private test repository",
+    "visibility": "PRIVATE",
+    "primaryLanguage": {"name": "python"},
+    "stargazerCount": 5,
+    "forkCount": 1,
+    "diskUsage": 200,
+    "updatedAt": "2024-01-02T00:00:00Z",
+    "createdAt": "2024-01-01T00:00:00Z",
+    "isArchived": false,
+    "url": "https://github.com/user/private-repo",
+    "sshUrl": "git@github.com:user/private-repo.git"
+  }
+]
+JSON_DATA
+                    exit 0
+                elif [ "$3" = "--limit" ]; then
+                    # Output mock repository data (non-JSON)
                     echo "user/test-repo"
                     echo "user/private-repo"
                 fi
@@ -215,8 +261,26 @@ setup_mock_git() {
 #!/bin/bash
 case "$1" in
     "init")
-        mkdir -p "$2/.git"
-        echo "Initialized empty Git repository in $2/.git/"
+        # Handle git init with or without -q flag
+        # git init -q (init in current dir, quiet)
+        # git init <dir> (init in specified dir)
+        # git init -q <dir> (init in specified dir, quiet)
+        local dir=""
+        shift  # skip "init"
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                -q|--quiet) shift ;;  # ignore quiet flag
+                *) dir="$1"; shift ;;
+            esac
+        done
+        # If no dir specified, use current directory
+        if [[ -z "$dir" ]]; then
+            mkdir -p ".git"
+            echo "Initialized empty Git repository in .git/"
+        else
+            mkdir -p "$dir/.git"
+            echo "Initialized empty Git repository in $dir/.git/"
+        fi
         exit 0
         ;;
     "add")

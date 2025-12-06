@@ -1,0 +1,38 @@
+---
+description: Defines the monolithic Bash architecture, the role of the script as an orchestrator, and its core external dependencies.
+globs:
+  - "*"
+alwaysApply: true
+---
+
+# Project Architecture and External Dependencies
+
+The 'ghtools' project is a single, monolithic Bash script designed to be an **Orchestrator** for GitHub repository management. It does not contain complex internal libraries but rather wraps and coordinates external CLI tools.
+
+## 1. Architectural Pattern: Command Dispatcher
+
+All core functionality is implemented in dedicated functions prefixed with `action_`. The main execution block uses a `case` statement to dispatch the user's command-line argument to the correct handler.
+
+*   **Rule:** New commands must be implemented as `action_<command_name>` functions and registered in the main `case` block.
+*   **Example Handlers:** `action_list`, `action_clone`, `action_sync`.
+
+## 2. Core External Dependencies
+
+The script is highly coupled to the following external tools. Assume they are installed and authenticated (where applicable).
+
+| Tool | Purpose | Integration Point |
+| :--- | :--- | :--- |
+| `gh` | GitHub API interaction (Required) | All data fetching and write operations. |
+| `jq` | JSON parsing and transformation (Required) | Used to filter and project data from `gh` output. |
+| `fzf` | Interactive fuzzy finding (Required) | Used in `select_repos_fzf` for user selection. |
+| `gum` | Enhanced TUI/Styling (Optional) | Used conditionally by `print_*` functions if available.
+
+*   **Rule:** When interacting with GitHub, always use the `gh` CLI. Do not attempt to use `curl` or direct API calls unless `gh` is insufficient.
+*   **Rule:** All JSON manipulation must be handled by `jq` to ensure robust parsing and adherence to the repository data contract.
+
+## 3. Presentation Abstraction
+
+All user-facing output must pass through the standardized logging functions to respect the global `VERBOSE` and `QUIET` flags.
+
+*   **Mandatory Functions:** `print_error`, `print_success`, `print_info`, `print_verbose`.
+*   **UI Logic:** Check `use_gum` before attempting to use `gum` commands (e.g., `gum style`, `gum choose`). Fallback to standard ANSI colors or `fzf` is mandatory for a functional experience.
