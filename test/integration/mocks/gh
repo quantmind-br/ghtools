@@ -1,0 +1,54 @@
+#!/bin/bash
+case "$1" in
+    "auth")
+        if [ "$2" = "status" ]; then
+            echo "github.com
+  Logged in to github.com as user (oauth_token)
+  Git operations done over the http on api.github.com
+  Active user: user"
+            exit 0
+        fi
+        ;;
+    "repo")
+        case "$2" in
+            "list")
+                if [ "$3" = "--limit" ]; then
+                    # Output mock repository data
+                    echo "user/test-repo"
+                    echo "user/private-repo"
+                fi
+                ;;
+            "clone")
+                echo "Mock clone of $3"
+                exit 0
+                ;;
+            "create")
+                echo "Mock create of $3"
+                exit 0
+                ;;
+            "delete")
+                echo "Mock delete of $3"
+                exit 0
+                ;;
+            "edit")
+                echo "Mock edit of $3"
+                exit 0
+                ;;
+        esac
+        ;;
+    "search")
+        if [ "$1" = "search" ] && [ "$2" = "repos" ]; then
+            # Output mock search results
+            echo "example/repo1"
+            echo "example/repo2"
+        fi
+        ;;
+    "api")
+        # Mock API calls
+        if [[ "$*" == *"user/starred"* ]]; then
+            echo "Mock starred"
+            exit 0
+        fi
+        ;;
+esac
+exit 0

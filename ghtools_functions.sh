@@ -1,10 +1,13 @@
 #!/bin/bash
 
-# ghtools - Unified GitHub repository management tool (Refactored)
-# Version: 3.1.0
-# Requires: gh (GitHub CLI), gum, fzf, jq, git
+# ghtools_functions.sh - Functions extracted for testing
+# This file is auto-generated from ghtools for testing purposes
+# Do not edit directly - modify ghtools and regenerate
 
-set -euo pipefail
+# Skip strict mode in test mode
+if [[ "${GHTOOLS_TEST_MODE:-}" != "1" ]]; then
+  set -euo pipefail
+fi
 
 # --- Version ---
 VERSION="3.2.0"
@@ -69,7 +72,11 @@ EOF
     fi
 }
 
-load_config
+# Skip auto-loading config when in test mode
+if [[ "${GHTOOLS_TEST_MODE:-}" != "1" ]]; then
+  load_config
+fi
+
 
 # --- Color Scheme (Modern Purple/Cyan Theme) ---
 # Primary colors
@@ -2140,4 +2147,8 @@ main() {
   esac
 }
 
-main "$@"
+
+# Only run main if executed directly (not sourced) and not in test mode
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]] && [[ "${GHTOOLS_TEST_MODE:-}" != "1" ]]; then
+  main "$@"
+fi

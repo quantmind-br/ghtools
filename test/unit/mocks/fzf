@@ -1,0 +1,10 @@
+#!/bin/bash
+# Mock fzf - just select first line or echo input
+if [ "$*" == *"--multi"* ]; then
+    # Multi-select mode - return all lines
+    cat
+else
+    # Single select - return first line
+    head -n 1
+fi
+exit 0

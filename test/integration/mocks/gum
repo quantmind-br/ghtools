@@ -1,0 +1,41 @@
+#!/bin/bash
+# Mock gum - just echo the text or return first line for choose
+case "$1" in
+    "style")
+        # Just output the text
+        shift
+        echo "$@"
+        ;;
+    "choose")
+        # Return first option
+        head -n 1
+        ;;
+    "input")
+        # Return default or echo input
+        if [[ "$*" == *"--value"* ]]; then
+            # Get default value
+            echo "default"
+        else
+            read -r input
+            echo "${input:-default}"
+        fi
+        ;;
+    "confirm")
+        # Always return true
+        exit 0
+        ;;
+    "filter")
+        # Return input
+        head -n 1
+        ;;
+    "write")
+        # Return default text
+        echo "Test commit message"
+        ;;
+    "spin")
+        # Execute command and return
+        shift
+        "$@"
+        ;;
+esac
+exit 0

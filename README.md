@@ -11,6 +11,7 @@ Ferramenta unificada para gerenciar repositórios do GitHub com interface intera
 - **Exclusão de Repositórios**: Delete repositórios com segurança
 - **Menu Interativo**: Interface amigável com fzf
 - **Busca Fuzzy**: Encontre repositórios rapidamente
+- **Interface Moderna**: TUI aprimorada com o uso de gum (recomendado)
 - **Seleção Múltipla**: Gerencie vários repositórios simultaneamente
 - **Confirmações de Segurança**: Proteção contra ações acidentais
 - **Output Colorido**: Interface visual clara e intuitiva
@@ -48,19 +49,20 @@ source ~/.zshrc
 ## Dependências
 
 - `gh` (GitHub CLI)
-- `fzf` (Fuzzy Finder)
+- `gum` (Terminal UI Toolkit) - Altamente recomendado para a TUI moderna
+- `fzf` (Fuzzy Finder) - Essencial para fallback de seleção
 - `git` (apenas para clone)
 
 ### Instalar no Arch Linux / CachyOS:
 
 ```bash
-sudo pacman -S github-cli fzf git
+sudo pacman -S github-cli fzf git gum
 ```
 
 ou
 
 ```bash
-yay -S github-cli fzf git
+yay -S github-cli fzf git gum
 ```
 
 ## Uso
