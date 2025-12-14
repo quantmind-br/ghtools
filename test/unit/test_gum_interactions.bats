@@ -24,38 +24,39 @@ teardown() {
 
 # ========================================
 # Test Suite: gum_confirm
-# These tests pipe input to simulate user response
+# In test mode (YES_MODE=true), gum_confirm returns based on default parameter
+# These tests verify the function handles various prompt formats correctly
 # ========================================
 
 @test "gum_confirm executes without error" {
-    # Simulate user typing 'y' (yes)
-    run bash -c 'echo "y" | gum_confirm "Test prompt"'
+    # In test mode, uses default parameter to determine return value
+    run gum_confirm "Test prompt" "yes"
     [ "$status" -eq 0 ]
 }
 
 @test "gum_confirm respects default yes parameter" {
-    run bash -c 'echo "y" | gum_confirm "Test prompt" "yes"'
+    run gum_confirm "Test prompt" "yes"
     [ "$status" -eq 0 ]
 }
 
 @test "gum_confirm respects default no parameter" {
-    # When default is no and user types nothing, should fail
-    run bash -c 'echo "" | gum_confirm "Test prompt" "no"'
+    # When default is no, should return failure (exit 1)
+    run gum_confirm "Test prompt" "no"
     [ "$status" -eq 1 ]
 }
 
 @test "gum_confirm handles empty prompt" {
-    run bash -c 'echo "y" | gum_confirm ""'
+    run gum_confirm "" "yes"
     [ "$status" -eq 0 ]
 }
 
 @test "gum_confirm handles prompt with special characters" {
-    run bash -c 'echo "y" | gum_confirm "Are you sure? (!@#$%)"'
+    run gum_confirm "Are you sure? (!@#\$%)" "yes"
     [ "$status" -eq 0 ]
 }
 
 @test "gum_confirm handles prompt with quotes" {
-    run bash -c "echo 'y' | gum_confirm \"Continue with 'special' prompt?\""
+    run gum_confirm "Continue with 'special' prompt?" "yes"
     [ "$status" -eq 0 ]
 }
 
@@ -63,22 +64,22 @@ teardown() {
     local long_prompt="This is a very long confirmation prompt "
     long_prompt+="that exceeds normal line length and should be handled gracefully "
     long_prompt+="without causing any issues."
-    run bash -c "echo 'y' | gum_confirm '$long_prompt'"
+    run gum_confirm "$long_prompt" "yes"
     [ "$status" -eq 0 ]
 }
 
 @test "gum_confirm handles prompt with newlines" {
-    run bash -c 'echo "y" | gum_confirm "Line 1 Line 2"'
+    run gum_confirm "Line 1 Line 2" "yes"
     [ "$status" -eq 0 ]
 }
 
 @test "gum_confirm handles prompt with international characters" {
-    run bash -c 'echo "y" | gum_confirm "¿Continuar?"'
+    run gum_confirm "¿Continuar?" "yes"
     [ "$status" -eq 0 ]
 }
 
 @test "gum_confirm handles prompt with unicode" {
-    run bash -c 'echo "y" | gum_confirm "Continue? 🎉"'
+    run gum_confirm "Continue? 🎉" "yes"
     [ "$status" -eq 0 ]
 }
 
