@@ -1,3 +1,7 @@
+**Note**: This project uses [bd (beads)](https://github.com/steveyegge/beads)
+for issue tracking. Use `bd` commands instead of markdown TODOs.
+See AGENTS.md for workflow details.
+
 # CLAUDE.md: ghtools Configuration
 
 This repository contains `ghtools`, a single-file Bash CLI script designed to be a unified, interactive manager for GitHub repositories. It acts as an orchestrator, wrapping and enhancing the functionality of the `gh` (GitHub CLI) tool, `git`, and TUI tools like `fzf` and `gum`.

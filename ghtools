@@ -18,6 +18,7 @@ CACHE_TTL=600     # 10 minutes (in seconds)
 MAX_JOBS=5        # Parallel jobs for sync/clone
 VERBOSE=false
 QUIET=false
+YES_MODE=false   # Non-interactive mode (auto-confirm with defaults)
 
 # --- Load User Config ---
 load_config() {
@@ -249,6 +250,11 @@ gum_confirm() {
   local prompt="$1"
   local default="${2:-no}"
 
+  # Non-interactive mode: return based on default
+  if [[ "$YES_MODE" == "true" ]] || [[ "${GHTOOLS_TEST_MODE:-}" == "1" ]]; then
+    [[ "$default" == "yes" ]] && return 0 || return 1
+  fi
+
   if use_gum; then
     if [[ "$default" == "yes" ]]; then
       gum confirm --affirmative "Yes" --negative "No" --default=true \
@@ -259,7 +265,7 @@ gum_confirm() {
     fi
   else
     local response
-    read -p "$prompt [y/N]: " response
+    read -rp "$prompt [y/N]: " response
     [[ "$response" =~ ^[Yy]$ ]]
   fi
 }
@@ -270,6 +276,12 @@ gum_input() {
   local prompt="${2:-› }"
   local default="${3:-}"
 
+  # Non-interactive mode: return default or placeholder
+  if [[ "$YES_MODE" == "true" ]] || [[ "${GHTOOLS_TEST_MODE:-}" == "1" ]]; then
+    echo "${default:-$placeholder}"
+    return 0
+  fi
+
   if use_gum; then
     gum input --placeholder "$placeholder" \
       --prompt "$prompt" \
@@ -278,7 +290,7 @@ gum_input() {
       --value "$default"
   else
     local response
-    read -p "$prompt$placeholder: " response
+    read -rp "$prompt$placeholder: " response
     echo "${response:-$default}"
   fi
 }
@@ -288,6 +300,12 @@ gum_choose() {
   local header="$1"
   shift
   local options=("$@")
+
+  # Non-interactive mode: return first option
+  if [[ "$YES_MODE" == "true" ]] || [[ "${GHTOOLS_TEST_MODE:-}" == "1" ]]; then
+    echo "${options[0]}"
+    return 0
+  fi
 
   if use_gum; then
     printf '%s\n' "${options[@]}" | gum choose \
@@ -305,6 +323,16 @@ gum_choose() {
 gum_filter() {
   local placeholder="$1"
   local multi="${2:-false}"
+
+  # Non-interactive mode: return all/first line from stdin
+  if [[ "$YES_MODE" == "true" ]] || [[ "${GHTOOLS_TEST_MODE:-}" == "1" ]]; then
+    if [[ "$multi" == "true" ]]; then
+      cat
+    else
+      head -n 1
+    fi
+    return 0
+  fi
 
   if use_gum; then
     local args=(
@@ -328,6 +356,16 @@ gum_filter() {
 # Write/text area input
 gum_write() {
   local placeholder="$1"
+
+  # Non-interactive mode: return placeholder or read from stdin if available
+  if [[ "$YES_MODE" == "true" ]] || [[ "${GHTOOLS_TEST_MODE:-}" == "1" ]]; then
+    if [[ ! -t 0 ]]; then
+      cat
+    else
+      echo "$placeholder"
+    fi
+    return 0
+  fi
 
   if use_gum; then
     gum write --placeholder "$placeholder" \
@@ -409,6 +447,7 @@ ${YELLOW}OPTIONS:${NC}
     -v, --version       Show version
     -V, --verbose       Enable verbose output
     -q, --quiet         Suppress non-error output
+    -y, --yes           Non-interactive mode (auto-confirm with defaults)
 
 ${YELLOW}EXAMPLES:${NC}
     ghtools list --lang python --org myorg
@@ -426,6 +465,23 @@ ${YELLOW}CONFIG:${NC}
     Config file: \$XDG_CONFIG_HOME/ghtools/config (or ~/.config/ghtools/config)
 
 EOF
+}
+
+# Safe read with test mode support
+# Usage: safe_read "prompt" "default_value" variable_name
+safe_read() {
+  local prompt="$1"
+  local default="${2:-}"
+  local varname="${3:-REPLY}"
+
+  if [[ "$YES_MODE" == "true" ]] || [[ "${GHTOOLS_TEST_MODE:-}" == "1" ]]; then
+    printf -v "$varname" '%s' "$default"
+    return 0
+  fi
+
+  local _input
+  read -rp "$prompt" _input
+  printf -v "$varname" '%s' "$_input"
 }
 
 check_dependencies() {
@@ -786,7 +842,8 @@ check_delete_scope() {
   if ! gh auth status 2>&1 | grep -q "delete_repo"; then
     print_error "Missing 'delete_repo' scope required for repository deletion."
     echo ""
-    read -p "Would you like to refresh auth with delete_repo scope? [y/N]: " response
+    local response
+    safe_read "Would you like to refresh auth with delete_repo scope? [y/N]: " "n" response
     if [[ "$response" =~ ^[Yy]$ ]]; then
       print_info "Running: gh auth refresh -s delete_repo"
       if gh auth refresh -s delete_repo; then
@@ -829,7 +886,8 @@ action_delete() {
   printf "  - ${RED}%s${NC}\n" "${repos[@]}"
   echo ""
 
-  read -p "Type 'DELETE' to confirm, or anything else for Dry Run: " confirm
+  local confirm
+  safe_read "Type 'DELETE' to confirm, or anything else for Dry Run: " "DELETE" confirm
   local dry_run=true
   if [ "$confirm" == "DELETE" ]; then
     dry_run=false
@@ -861,14 +919,7 @@ action_create() {
 
   # Get repository name
   local name
-  if use_gum; then
-    name=$(gum input --placeholder "Repository name" \
-      --prompt "› " \
-      --prompt.foreground "$COLOR_PRIMARY" \
-      --cursor.foreground "$COLOR_ACCENT")
-  else
-    read -p "Repository Name: " name
-  fi
+  name=$(gum_input "Repository name" "› " "")
 
   if [ -z "$name" ]; then
     print_error "Name required"
@@ -877,39 +928,16 @@ action_create() {
 
   # Get description
   local desc
-  if use_gum; then
-    desc=$(gum input --placeholder "Description (optional)" \
-      --prompt "› " \
-      --prompt.foreground "$COLOR_PRIMARY" \
-      --cursor.foreground "$COLOR_ACCENT")
-  else
-    read -p "Description: " desc
-  fi
+  desc=$(gum_input "Description (optional)" "› " "")
 
   # Select visibility
   local vis
-  if use_gum; then
-    vis=$(gum choose --header "Visibility:" \
-      --cursor "› " \
-      --cursor.foreground "$COLOR_ACCENT" \
-      --header.foreground "$COLOR_PRIMARY" \
-      "public" "private")
-  else
-    vis=$(echo -e "public\nprivate" | fzf --height=10% --prompt="Visibility > ")
-  fi
+  vis=$(gum_choose "Visibility:" "public" "private")
   [ -z "$vis" ] && vis="private"
 
   # Select template
   local tpl
-  if use_gum; then
-    tpl=$(gum choose --header "Template:" \
-      --cursor "› " \
-      --cursor.foreground "$COLOR_ACCENT" \
-      --header.foreground "$COLOR_PRIMARY" \
-      "none" "python" "node" "go")
-  else
-    tpl=$(echo -e "none\npython\nnode\ngo" | fzf --height=15% --prompt="Template > ")
-  fi
+  tpl=$(gum_choose "Template:" "none" "python" "node" "go")
 
   # Confirm creation
   echo ""
@@ -1015,7 +1043,7 @@ action_fork() {
   done
 
   if [ -z "$search_query" ]; then
-    read -p "Search for repository to fork: " search_query
+    search_query=$(gum_input "Search for repository to fork" "› " "")
     if [ -z "$search_query" ]; then
       print_error "Search query required"
       return 1
@@ -1089,14 +1117,7 @@ action_explore() {
     show_header "EXPLORE GITHUB" "Search repositories worldwide"
 
     # Get search query
-    if use_gum; then
-      search_query=$(gum input --placeholder "Search query (e.g., 'machine learning')" \
-        --prompt "› " \
-        --prompt.foreground "$COLOR_PRIMARY" \
-        --cursor.foreground "$COLOR_ACCENT")
-    else
-      read -p "Search query: " search_query
-    fi
+    search_query=$(gum_input "Search query (e.g., 'machine learning')" "› " "")
 
     if [ -z "$search_query" ]; then
       print_error "Search query required"
@@ -1104,35 +1125,12 @@ action_explore() {
     fi
 
     # Get sort option
-    if use_gum; then
-      local sort_choice
-      sort_choice=$(gum choose --header "Sort by:" \
-        --cursor "› " \
-        --cursor.foreground "$COLOR_ACCENT" \
-        --header.foreground "$COLOR_PRIMARY" \
-        "stars" "forks" "updated" "help-wanted-issues")
-      sort_by="${sort_choice:-stars}"
-    else
-      echo ""
-      echo "Sort by: (s)tars | (f)orks | (u)pdated | (h)elp-wanted"
-      read -p "Sort [stars]: " sort_choice
-      case "$sort_choice" in
-      f) sort_by="forks" ;;
-      u) sort_by="updated" ;;
-      h) sort_by="help-wanted-issues" ;;
-      *) sort_by="stars" ;;
-      esac
-    fi
+    local sort_choice
+    sort_choice=$(gum_choose "Sort by:" "stars" "forks" "updated" "help-wanted-issues")
+    sort_by="${sort_choice:-stars}"
 
     # Get language filter
-    if use_gum; then
-      language=$(gum input --placeholder "Filter by language (leave empty for all)" \
-        --prompt "› " \
-        --prompt.foreground "$COLOR_PRIMARY" \
-        --cursor.foreground "$COLOR_ACCENT")
-    else
-      read -p "Filter by language (leave empty for all): " language
-    fi
+    language=$(gum_input "Filter by language (leave empty for all)" "› " "")
   fi
 
   print_info "Searching GitHub for '$search_query' (sorted by $sort_by)..."
@@ -1181,32 +1179,14 @@ action_explore() {
   echo ""
 
   local action
-  if use_gum; then
-    action=$(gum choose \
-      --header "Select action:" \
-      --cursor "› " \
-      --cursor.foreground "$COLOR_ACCENT" \
-      --header.foreground "$COLOR_PRIMARY" \
-      --selected.foreground "$COLOR_SECONDARY" \
-      "Clone - Clone to local machine" \
-      "Fork - Fork to your account" \
-      "Fork + Clone - Fork and clone" \
-      "Browse - Open in browser" \
-      "Star - Star the repository" \
-      "Info - Show detailed info" \
-      "Cancel")
-  else
-    echo -e "${YELLOW}Actions:${NC}"
-    echo "  (c) Clone          - Clone to local machine"
-    echo "  (f) Fork           - Fork to your account"
-    echo "  (F) Fork + Clone   - Fork and clone"
-    echo "  (b) Browse         - Open in browser"
-    echo "  (s) Star           - Star the repository"
-    echo "  (i) Info           - Show detailed info"
-    echo "  (q) Quit           - Cancel"
-    echo ""
-    read -p "Action: " action
-  fi
+  action=$(gum_choose "Select action:" \
+    "Clone - Clone to local machine" \
+    "Fork - Fork to your account" \
+    "Fork + Clone - Fork and clone" \
+    "Browse - Open in browser" \
+    "Star - Star the repository" \
+    "Info - Show detailed info" \
+    "Cancel")
 
   case "$action" in
   c|"Clone"*)
@@ -1261,11 +1241,7 @@ action_explore() {
       show_header "$repo" "Repository Details"
       gh repo view "$repo" 2>/dev/null || print_error "Failed to fetch info"
       echo ""
-      if use_gum; then
-        gum confirm "Continue?" --affirmative "OK" --negative "" --default=true || true
-      else
-        read -p "Press Enter to continue..."
-      fi
+      gum_confirm "Continue?" "yes" || true
     done
     ;;
   q|"Cancel"*|*)
@@ -1330,22 +1306,12 @@ action_trending() {
 
   echo ""
   local action
-  if use_gum; then
-    action=$(gum choose \
-      --header "Select action:" \
-      --cursor "› " \
-      --cursor.foreground "$COLOR_ACCENT" \
-      --header.foreground "$COLOR_PRIMARY" \
-      --selected.foreground "$COLOR_SECONDARY" \
-      "Clone - Clone to local machine" \
-      "Fork - Fork to your account" \
-      "Browse - Open in browser" \
-      "Star - Star the repository" \
-      "Cancel")
-  else
-    echo "Actions: (c)lone | (f)ork | (b)rowse | (s)tar | (q)uit"
-    read -p "Action: " action
-  fi
+  action=$(gum_choose "Select action:" \
+    "Clone - Clone to local machine" \
+    "Fork - Fork to your account" \
+    "Browse - Open in browser" \
+    "Star - Star the repository" \
+    "Cancel")
 
   case "$action" in
   c|"Clone"*)
@@ -1427,9 +1393,8 @@ action_archive() {
   print_warning "You are about to $mode ${#repos[@]} repositories:"
   printf "  - %s\n" "${repos[@]}"
   echo ""
-  read -p "Continue? [y/N]: " confirm
 
-  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+  if ! gum_confirm "Continue?" "no"; then
     print_info "Cancelled."
     return
   fi
@@ -1600,21 +1565,11 @@ action_search() {
 
   echo ""
   local action
-  if use_gum; then
-    action=$(gum choose \
-      --header "Select action:" \
-      --cursor "› " \
-      --cursor.foreground "$COLOR_ACCENT" \
-      --header.foreground "$COLOR_PRIMARY" \
-      --selected.foreground "$COLOR_SECONDARY" \
-      "Clone - Clone to local machine" \
-      "Browse - Open in browser" \
-      "Delete - Delete repositories" \
-      "Cancel")
-  else
-    echo "Actions: (c)lone | (b)rowse | (d)elete | (q)uit"
-    read -p "Action: " action
-  fi
+  action=$(gum_choose "Select action:" \
+    "Clone - Clone to local machine" \
+    "Browse - Open in browser" \
+    "Delete - Delete repositories" \
+    "Cancel")
 
   local repos=()
   while IFS=$'\t' read -r repo _ _ _; do
@@ -1636,14 +1591,7 @@ action_search() {
   d|"Delete"*)
     print_warning "Delete selected repos? This is NOT reversible!"
     local confirm
-    if use_gum; then
-      confirm=$(gum input --placeholder "Type DELETE to confirm" \
-        --prompt "› " \
-        --prompt.foreground "$COLOR_ERROR" \
-        --cursor.foreground "$COLOR_ERROR")
-    else
-      read -p "Type 'DELETE' to confirm: " confirm
-    fi
+    confirm=$(gum_input "Type DELETE to confirm" "› " "DELETE")
     if [ "$confirm" = "DELETE" ]; then
       for repo in "${repos[@]}"; do
         gh repo delete "$repo" --yes 2>/dev/null && print_success "Deleted: $repo" || print_error "Failed: $repo"
@@ -1748,8 +1696,10 @@ action_visibility() {
   done
 
   echo ""
-  read -p "Continue? [y/N]: " confirm
-  [[ ! "$confirm" =~ ^[Yy]$ ]] && return
+  if ! gum_confirm "Continue?" "no"; then
+    print_info "Cancelled."
+    return
+  fi
 
   for i in "${!repos[@]}"; do
     local new_vis
@@ -1833,12 +1783,14 @@ action_pr_create() {
 
   print_info "Creating PR from branch: $current_branch"
 
-  read -p "PR Title: " title
+  local title
+  title=$(gum_input "PR Title" "› " "$current_branch")
   [ -z "$title" ] && title="$current_branch"
 
   local draft=""
-  read -p "Create as draft? [y/N]: " is_draft
-  [[ "$is_draft" =~ ^[Yy]$ ]] && draft="--draft"
+  if gum_confirm "Create as draft?" "no"; then
+    draft="--draft"
+  fi
 
   # Push branch if needed
   if ! git ls-remote --exit-code --heads origin "$current_branch" &>/dev/null; then
@@ -2055,6 +2007,10 @@ main() {
       QUIET=true
       shift
       ;;
+    -y | --yes | --no-input)
+      YES_MODE=true
+      shift
+      ;;
     *)
       # Stop parsing global options, pass to command handler
       break
@@ -2066,11 +2022,16 @@ main() {
   check_gh_auth
 
   if [ $# -eq 0 ]; then
-    while true; do
+    # In test mode, just show menu once
+    if [[ "$YES_MODE" == "true" ]] || [[ "${GHTOOLS_TEST_MODE:-}" == "1" ]]; then
       show_menu
-      echo ""
-      read -p "Press Enter to continue..."
-    done
+    else
+      while true; do
+        show_menu
+        echo ""
+        gum_confirm "Continue?" "yes" || exit 0
+      done
+    fi
   fi
 
   case "$1" in

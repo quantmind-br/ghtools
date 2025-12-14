@@ -2,39 +2,55 @@
 # Mock gum - just echo the text or return first line for choose
 case "$1" in
     "style")
-        # Just output the text
+        # Just output the text (skip flags)
         shift
+        while [[ "$1" == --* ]]; do shift; done
         echo "$@"
         ;;
     "choose")
-        # Return first option
+        # Return first option from stdin
         head -n 1
         ;;
     "input")
-        # Return default or echo input
-        if [[ "$*" == *"--value"* ]]; then
-            # Get default value
-            echo "default"
-        else
-            read -r input
-            echo "${input:-default}"
-        fi
+        # Return value from --value flag or placeholder
+        for arg in "$@"; do
+            if [[ "$prev" == "--value" ]]; then
+                echo "$arg"
+                exit 0
+            fi
+            if [[ "$prev" == "--placeholder" ]]; then
+                placeholder="$arg"
+            fi
+            prev="$arg"
+        done
+        echo "${placeholder:-default}"
         ;;
     "confirm")
-        # Always return true
+        # Always return true (confirmed)
         exit 0
         ;;
     "filter")
-        # Return input
-        head -n 1
+        # Return first line from stdin
+        if [[ " $* " == *" --no-limit "* ]]; then
+            cat
+        else
+            head -n 1
+        fi
         ;;
     "write")
         # Return default text
         echo "Test commit message"
         ;;
     "spin")
-        # Execute command and return
+        # Skip options until we find -- then execute command
         shift
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --) shift; break ;;
+                --*) shift ;;
+                *) break ;;
+            esac
+        done
         "$@"
         ;;
 esac

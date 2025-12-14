@@ -31,6 +31,7 @@ export -f gum_filter 2>/dev/null || true
 export -f gum_write 2>/dev/null || true
 export -f print_table_row 2>/dev/null || true
 export -f show_usage 2>/dev/null || true
+export -f safe_read 2>/dev/null || true
 export -f check_dependencies 2>/dev/null || true
 export -f check_gh_auth 2>/dev/null || true
 export -f is_cache_valid 2>/dev/null || true
@@ -73,6 +74,7 @@ export CACHE_TTL=600
 export MAX_JOBS=2
 export VERBOSE=false
 export QUIET=true
+export YES_MODE=true  # Enable non-interactive mode for tests
 
 # Create test directory
 mkdir -p "$TEST_TMP_DIR"
@@ -226,11 +228,32 @@ JSON_DATA
         esac
         ;;
     "search")
-        if [ "$1" = "search" ] && [ "$2" = "repos" ]; then
-            # Output mock search results
-            echo "example/repo1"
-            echo "example/repo2"
+        if [ "$2" = "repos" ]; then
+            # Output mock search results as JSON
+            cat <<'SEARCH_JSON'
+[
+  {"fullName": "example/repo1", "description": "Test repo 1", "stargazersCount": 100, "language": "Go"},
+  {"fullName": "example/repo2", "description": "Test repo 2", "stargazersCount": 50, "language": "Python"}
+]
+SEARCH_JSON
         fi
+        ;;
+    "pr")
+        case "$2" in
+            "list")
+                echo "1\tFix bug\topen"
+                echo "2\tAdd feature\tclosed"
+                exit 0
+                ;;
+            "create")
+                echo "https://github.com/user/test-repo/pull/1"
+                exit 0
+                ;;
+        esac
+        ;;
+    "browse")
+        # Mock browse - do nothing
+        exit 0
         ;;
     "api")
         # Mock API calls
@@ -334,8 +357,8 @@ MOCK_SCRIPT
 setup_mock_fzf() {
     cat > "${MOCK_DIR}/fzf" <<'MOCK_SCRIPT'
 #!/bin/bash
-# Mock fzf - just select first line or echo input
-if [ "$*" == *"--multi"* ]; then
+# Mock fzf - select based on mode
+if [[ " $* " == *" --multi "* ]]; then
     # Multi-select mode - return all lines
     cat
 else
@@ -354,39 +377,55 @@ setup_mock_gum() {
 # Mock gum - just echo the text or return first line for choose
 case "$1" in
     "style")
-        # Just output the text
+        # Just output the text (skip flags)
         shift
+        while [[ "$1" == --* ]]; do shift; done
         echo "$@"
         ;;
     "choose")
-        # Return first option
+        # Return first option from stdin
         head -n 1
         ;;
     "input")
-        # Return default or echo input
-        if [[ "$*" == *"--value"* ]]; then
-            # Get default value
-            echo "default"
-        else
-            read -r input
-            echo "${input:-default}"
-        fi
+        # Return value from --value flag or placeholder
+        for arg in "$@"; do
+            if [[ "$prev" == "--value" ]]; then
+                echo "$arg"
+                exit 0
+            fi
+            if [[ "$prev" == "--placeholder" ]]; then
+                placeholder="$arg"
+            fi
+            prev="$arg"
+        done
+        echo "${placeholder:-default}"
         ;;
     "confirm")
-        # Always return true
+        # Always return true (confirmed)
         exit 0
         ;;
     "filter")
-        # Return input
-        head -n 1
+        # Return first line from stdin
+        if [[ " $* " == *" --no-limit "* ]]; then
+            cat
+        else
+            head -n 1
+        fi
         ;;
     "write")
         # Return default text
         echo "Test commit message"
         ;;
     "spin")
-        # Execute command and return
+        # Skip options until we find -- then execute command
         shift
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --) shift; break ;;
+                --*) shift ;;
+                *) break ;;
+            esac
+        done
         "$@"
         ;;
 esac

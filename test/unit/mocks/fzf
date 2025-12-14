@@ -1,6 +1,6 @@
 #!/bin/bash
-# Mock fzf - just select first line or echo input
-if [ "$*" == *"--multi"* ]; then
+# Mock fzf - select based on mode
+if [[ " $* " == *" --multi "* ]]; then
     # Multi-select mode - return all lines
     cat
 else

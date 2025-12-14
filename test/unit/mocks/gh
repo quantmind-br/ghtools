@@ -81,11 +81,32 @@ JSON_DATA
         esac
         ;;
     "search")
-        if [ "$1" = "search" ] && [ "$2" = "repos" ]; then
-            # Output mock search results
-            echo "example/repo1"
-            echo "example/repo2"
+        if [ "$2" = "repos" ]; then
+            # Output mock search results as JSON
+            cat <<'SEARCH_JSON'
+[
+  {"fullName": "example/repo1", "description": "Test repo 1", "stargazersCount": 100, "language": "Go"},
+  {"fullName": "example/repo2", "description": "Test repo 2", "stargazersCount": 50, "language": "Python"}
+]
+SEARCH_JSON
         fi
+        ;;
+    "pr")
+        case "$2" in
+            "list")
+                echo "1\tFix bug\topen"
+                echo "2\tAdd feature\tclosed"
+                exit 0
+                ;;
+            "create")
+                echo "https://github.com/user/test-repo/pull/1"
+                exit 0
+                ;;
+        esac
+        ;;
+    "browse")
+        # Mock browse - do nothing
+        exit 0
         ;;
     "api")
         # Mock API calls
