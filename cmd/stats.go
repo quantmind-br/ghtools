@@ -62,10 +62,17 @@ func runStats() error {
 		langCount[lang]++
 	}
 
+	termWidth, _ := tui.GetTerminalSize()
+	boxWidth := termWidth - 4
+	if boxWidth < 20 {
+		boxWidth = 20
+	}
+
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tui.ColorSecondary).
-		Padding(1, 2).MarginLeft(2)
+		Padding(1, 2).MarginLeft(2).
+		MaxWidth(boxWidth)
 
 	stats := fmt.Sprintf(
 		"Total Repositories:  %d\nPublic:              %d\nPrivate:             %d\nArchived:            %d",
@@ -76,7 +83,8 @@ func runStats() error {
 	metricsBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tui.ColorAccent).
-		Padding(1, 2).MarginLeft(2)
+		Padding(1, 2).MarginLeft(2).
+		MaxWidth(boxWidth)
 
 	sizeMB := totalSize / 1024
 	metrics := fmt.Sprintf(

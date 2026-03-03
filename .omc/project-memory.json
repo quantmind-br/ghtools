@@ -100,8 +100,14 @@
   "hotPaths": [
     {
       "path": "cmd/list.go",
-      "accessCount": 45,
-      "lastAccessed": 1772536941252,
+      "accessCount": 50,
+      "lastAccessed": 1772537552786,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/choose.go",
+      "accessCount": 25,
+      "lastAccessed": 1772540530407,
       "type": "file"
     },
     {
@@ -112,8 +118,8 @@
     },
     {
       "path": "cmd/stats.go",
-      "accessCount": 18,
-      "lastAccessed": 1772536981574,
+      "accessCount": 23,
+      "lastAccessed": 1772537552744,
       "type": "file"
     },
     {
@@ -123,27 +129,39 @@
       "type": "file"
     },
     {
+      "path": "internal/tui/multiselect.go",
+      "accessCount": 16,
+      "lastAccessed": 1772537551757,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/print.go",
+      "accessCount": 15,
+      "lastAccessed": 1772537551308,
+      "type": "file"
+    },
+    {
+      "path": "cmd/menu.go",
+      "accessCount": 15,
+      "lastAccessed": 1772539869760,
+      "type": "file"
+    },
+    {
       "path": "cmd/clone.go",
       "accessCount": 13,
       "lastAccessed": 1772536988442,
       "type": "file"
     },
     {
-      "path": "cmd/menu.go",
-      "accessCount": 10,
-      "lastAccessed": 1772536656472,
-      "type": "file"
+      "path": "",
+      "accessCount": 13,
+      "lastAccessed": 1772537529500,
+      "type": "directory"
     },
     {
-      "path": "internal/tui/choose.go",
+      "path": "internal/tui/table.go",
       "accessCount": 9,
-      "lastAccessed": 1772536850608,
-      "type": "file"
-    },
-    {
-      "path": "internal/tui/print.go",
-      "accessCount": 9,
-      "lastAccessed": 1772536889500,
+      "lastAccessed": 1772537497259,
       "type": "file"
     },
     {
@@ -153,16 +171,10 @@
       "type": "file"
     },
     {
-      "path": "internal/tui/multiselect.go",
+      "path": "internal/tui/styles.go",
       "accessCount": 8,
-      "lastAccessed": 1772536678748,
+      "lastAccessed": 1772537550863,
       "type": "file"
-    },
-    {
-      "path": "",
-      "accessCount": 6,
-      "lastAccessed": 1772536716436,
-      "type": "directory"
     },
     {
       "path": "cmd",
@@ -171,21 +183,51 @@
       "type": "directory"
     },
     {
-      "path": "internal/tui/table.go",
-      "accessCount": 5,
-      "lastAccessed": 1772536760241,
-      "type": "file"
-    },
-    {
       "path": "internal/tui",
       "accessCount": 5,
       "lastAccessed": 1772536877838,
       "type": "directory"
     },
     {
+      "path": "cmd/helpers.go",
+      "accessCount": 5,
+      "lastAccessed": 1772537552207,
+      "type": "file"
+    },
+    {
       "path": "internal/tui/spinner.go",
+      "accessCount": 4,
+      "lastAccessed": 1772537350950,
+      "type": "file"
+    },
+    {
+      "path": "cmd/root.go",
+      "accessCount": 4,
+      "lastAccessed": 1772537466886,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/input.go",
       "accessCount": 3,
-      "lastAccessed": 1772536883444,
+      "lastAccessed": 1772537404319,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/confirm.go",
+      "accessCount": 3,
+      "lastAccessed": 1772537404371,
+      "type": "file"
+    },
+    {
+      "path": "Makefile",
+      "accessCount": 3,
+      "lastAccessed": 1772537454697,
+      "type": "file"
+    },
+    {
+      "path": "main.go",
+      "accessCount": 3,
+      "lastAccessed": 1772537457484,
       "type": "file"
     },
     {
@@ -231,33 +273,21 @@
       "type": "file"
     },
     {
-      "path": "Makefile",
-      "accessCount": 1,
-      "lastAccessed": 1772536044002,
+      "path": "go.mod",
+      "accessCount": 2,
+      "lastAccessed": 1772537388736,
       "type": "file"
     },
     {
-      "path": "cmd/root.go",
+      "path": "internal",
       "accessCount": 1,
-      "lastAccessed": 1772536096702,
-      "type": "file"
+      "lastAccessed": 1772537405254,
+      "type": "directory"
     },
     {
-      "path": "internal/tui/styles.go",
+      "path": "CLAUDE.md",
       "accessCount": 1,
-      "lastAccessed": 1772536096758,
-      "type": "file"
-    },
-    {
-      "path": "internal/tui/confirm.go",
-      "accessCount": 1,
-      "lastAccessed": 1772536121423,
-      "type": "file"
-    },
-    {
-      "path": "internal/tui/input.go",
-      "accessCount": 1,
-      "lastAccessed": 1772536121528,
+      "lastAccessed": 1772537494012,
       "type": "file"
     }
   ],

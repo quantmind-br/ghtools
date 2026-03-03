@@ -26,7 +26,6 @@ var (
 			BorderForeground(ColorPrimary).
 			Foreground(ColorSecondary).
 			Align(lipgloss.Center).
-			Width(60).
 			Padding(1, 2).
 			MarginLeft(2)
 

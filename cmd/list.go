@@ -30,6 +30,9 @@ func init() {
 
 func getTableWidths() []int {
 	width, _ := tui.GetTerminalSize()
+	if width < 60 {
+		return []int{18, 20, 5, 5, 10}
+	}
 	if width < 100 {
 		return []int{25, 30, 8, 8, 10}
 	}

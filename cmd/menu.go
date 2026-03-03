@@ -7,7 +7,7 @@ import (
 )
 
 func runMenu() error {
-	tui.ShowHeader("GHTOOLS", fmt.Sprintf("GitHub Repository Manager v%s", version))
+	subtitle := fmt.Sprintf("GitHub Repository Manager v%s", version)
 
 	options := []string{
 		"[L] List Repositories",
@@ -31,7 +31,7 @@ func runMenu() error {
 	}
 
 	for {
-		choice, err := tui.RunChoose("Select an action:", options)
+		choice, err := tui.RunChooseWithTitle("GHTOOLS", subtitle, "Select an action:", options)
 		if err != nil {
 			return nil
 		}

@@ -34,8 +34,13 @@ func ShowHeader(title string, subtitle string) {
 	if subtitle != "" {
 		content += "\n" + subtitle
 	}
+	termWidth, _ := GetTerminalSize()
+	dynWidth := termWidth - 6
+	if dynWidth > 60 {
+		dynWidth = 60
+	}
 	fmt.Println()
-	fmt.Println(StyleHeader.Render(content))
+	fmt.Println(StyleHeader.Width(dynWidth).Render(content))
 	fmt.Println()
 }
 
