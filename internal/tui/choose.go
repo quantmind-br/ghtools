@@ -10,10 +10,24 @@ import (
 
 type chooseModel struct {
 	options   []string
+	shortcuts map[string]int // key -> option index
 	cursor    int
 	header    string
 	done      bool
 	cancelled bool
+}
+
+// parseShortcuts extracts keyboard shortcuts from options like "[L] List Repositories"
+func parseShortcuts(options []string) map[string]int {
+	shortcuts := make(map[string]int)
+	for i, opt := range options {
+		// Match patterns like [L], [S], etc.
+		if len(opt) >= 4 && opt[0] == '[' && opt[2] == ']' {
+			key := strings.ToLower(opt[1:2])
+			shortcuts[key] = i
+		}
+	}
+	return shortcuts
 }
 
 func (m chooseModel) Init() tea.Cmd { return nil }
@@ -37,6 +51,14 @@ func (m chooseModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.options)-1 {
 				m.cursor++
 			}
+		default:
+			// Check for shortcut key press
+			key := strings.ToLower(msg.String())
+			if idx, ok := m.shortcuts[key]; ok {
+				m.cursor = idx
+				m.done = true
+				return m, tea.Quit
+			}
 		}
 	}
 	return m, nil
@@ -57,7 +79,11 @@ func (m chooseModel) View() string {
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, opt))
 	}
 
-	b.WriteString("\n" + StyleMuted.Render("  Up/Down: navigate  Enter: select  Esc: cancel") + "\n")
+	helpText := "  Up/Down: navigate  Enter: select  Esc: cancel"
+	if len(m.shortcuts) > 0 {
+		helpText += "  Shortcuts: [key] to select"
+	}
+	b.WriteString("\n" + StyleMuted.Render(helpText) + "\n")
 
 	return b.String()
 }
@@ -70,7 +96,11 @@ func RunChoose(header string, options []string) (string, error) {
 		return "", fmt.Errorf("no options")
 	}
 
-	m := chooseModel{options: options, header: header}
+	m := chooseModel{
+		options:   options,
+		shortcuts: parseShortcuts(options),
+		header:    header,
+	}
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {

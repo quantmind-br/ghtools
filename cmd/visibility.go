@@ -58,7 +58,7 @@ func runVisibility(targetVis string) error {
 	}
 
 	if len(items) == 0 {
-		tui.PrintWarning("No repositories match the criteria")
+		tui.ShowEmptyState("No repositories match the criteria")
 		return nil
 	}
 

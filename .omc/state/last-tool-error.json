@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"go build ./...\",\"description\":\"Build Go project to verify changes\"}",
+  "error": "Exit code 1\n# github.com/diogo/ghtools/cmd\ncmd/list.go:32:14: undefined: syscall\n\n# github.com/diogo/ghtools/cmd\ncmd/list.go:32:14: undefined: syscall",
+  "timestamp": "2026-03-03T11:19:50.533Z",
+  "retry_count": 5
+}

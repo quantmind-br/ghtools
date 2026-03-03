@@ -28,13 +28,25 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 }
 
+func getTableWidths() []int {
+	width, _ := tui.GetTerminalSize()
+	if width < 100 {
+		return []int{25, 30, 8, 8, 10}
+	}
+	return []int{30, 40, 10, 10, 12}
+}
+
 func runList(refresh bool, lang, org string) error {
 	if org == "" {
 		org = cfg.DefaultOrg
 	}
 
-	tui.PrintInfo("Fetching repositories...")
-	repos, err := gh.FetchRepos(refresh, cfg.CacheTTL, org)
+	var repos []types.Repo
+	err := tui.RunWithSpinner("Fetching repositories...", func() error {
+		var err error
+		repos, err = gh.FetchRepos(refresh, cfg.CacheTTL, org)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -44,12 +56,12 @@ func runList(refresh bool, lang, org string) error {
 	}
 
 	if len(repos) == 0 {
-		tui.PrintWarning("No repositories found")
+		tui.ShowEmptyState("No repositories found matching your criteria")
 		return nil
 	}
 
 	headers := []string{"NAME", "DESCRIPTION", "VIS", "LANG", "UPDATED"}
-	widths := []int{30, 40, 10, 10, 12}
+	widths := getTableWidths()
 
 	var rows [][]string
 	for _, r := range repos {

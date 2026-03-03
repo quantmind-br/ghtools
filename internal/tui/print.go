@@ -38,3 +38,15 @@ func ShowHeader(title string, subtitle string) {
 	fmt.Println(StyleHeader.Render(content))
 	fmt.Println()
 }
+
+func ShowSection(title string, content string) {
+	fmt.Println()
+	fmt.Println(StyleMuted.Render("=== " + title + " ==="))
+	fmt.Println()
+	fmt.Println(content)
+}
+
+func ShowEmptyState(message string) {
+	fmt.Println()
+	ShowHeader("No Results", message)
+}

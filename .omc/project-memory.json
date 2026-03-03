@@ -1,0 +1,265 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1772536020300,
+  "projectRoot": "/Users/diogo/dev/ghtools",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Go",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "go.mod"
+        ]
+      },
+      {
+        "name": "C/C++",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "Makefile"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "go",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "make build",
+    "testCommand": "make test",
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [],
+    "gitBranches": {
+      "defaultBranch": "master",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "_legacy": {
+      "path": "_legacy",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1772536020279,
+      "keyFiles": [
+        "ghtools.bash"
+      ]
+    },
+    "cmd": {
+      "path": "cmd",
+      "purpose": null,
+      "fileCount": 20,
+      "lastAccessed": 1772536020280,
+      "keyFiles": [
+        "archive.go",
+        "browse.go",
+        "clone.go",
+        "config_cmd.go",
+        "create.go"
+      ]
+    },
+    "internal": {
+      "path": "internal",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1772536020281,
+      "keyFiles": []
+    },
+    "internal/config": {
+      "path": "internal/config",
+      "purpose": "Configuration files",
+      "fileCount": 1,
+      "lastAccessed": 1772536020285,
+      "keyFiles": [
+        "config.go"
+      ]
+    },
+    "internal/types": {
+      "path": "internal/types",
+      "purpose": "Type definitions",
+      "fileCount": 1,
+      "lastAccessed": 1772536020286,
+      "keyFiles": [
+        "types.go"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "cmd/list.go",
+      "accessCount": 45,
+      "lastAccessed": 1772536941252,
+      "type": "file"
+    },
+    {
+      "path": "cmd/search.go",
+      "accessCount": 24,
+      "lastAccessed": 1772537016914,
+      "type": "file"
+    },
+    {
+      "path": "cmd/stats.go",
+      "accessCount": 18,
+      "lastAccessed": 1772536981574,
+      "type": "file"
+    },
+    {
+      "path": "cmd/pr.go",
+      "accessCount": 18,
+      "lastAccessed": 1772537015238,
+      "type": "file"
+    },
+    {
+      "path": "cmd/clone.go",
+      "accessCount": 13,
+      "lastAccessed": 1772536988442,
+      "type": "file"
+    },
+    {
+      "path": "cmd/menu.go",
+      "accessCount": 10,
+      "lastAccessed": 1772536656472,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/choose.go",
+      "accessCount": 9,
+      "lastAccessed": 1772536850608,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/print.go",
+      "accessCount": 9,
+      "lastAccessed": 1772536889500,
+      "type": "file"
+    },
+    {
+      "path": "IDEATION_UI_UX.md",
+      "accessCount": 8,
+      "lastAccessed": 1772536639905,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/multiselect.go",
+      "accessCount": 8,
+      "lastAccessed": 1772536678748,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 6,
+      "lastAccessed": 1772536716436,
+      "type": "directory"
+    },
+    {
+      "path": "cmd",
+      "accessCount": 6,
+      "lastAccessed": 1772536929398,
+      "type": "directory"
+    },
+    {
+      "path": "internal/tui/table.go",
+      "accessCount": 5,
+      "lastAccessed": 1772536760241,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui",
+      "accessCount": 5,
+      "lastAccessed": 1772536877838,
+      "type": "directory"
+    },
+    {
+      "path": "internal/tui/spinner.go",
+      "accessCount": 3,
+      "lastAccessed": 1772536883444,
+      "type": "file"
+    },
+    {
+      "path": "cmd/status.go",
+      "accessCount": 2,
+      "lastAccessed": 1772536696758,
+      "type": "file"
+    },
+    {
+      "path": "cmd/archive.go",
+      "accessCount": 2,
+      "lastAccessed": 1772536711350,
+      "type": "file"
+    },
+    {
+      "path": "cmd/explore.go",
+      "accessCount": 2,
+      "lastAccessed": 1772536727676,
+      "type": "file"
+    },
+    {
+      "path": "cmd/visibility.go",
+      "accessCount": 2,
+      "lastAccessed": 1772536734249,
+      "type": "file"
+    },
+    {
+      "path": "cmd/fork.go",
+      "accessCount": 2,
+      "lastAccessed": 1772536742100,
+      "type": "file"
+    },
+    {
+      "path": "cmd/sync_cmd.go",
+      "accessCount": 2,
+      "lastAccessed": 1772536758361,
+      "type": "file"
+    },
+    {
+      "path": "cmd/trending.go",
+      "accessCount": 2,
+      "lastAccessed": 1772536765577,
+      "type": "file"
+    },
+    {
+      "path": "Makefile",
+      "accessCount": 1,
+      "lastAccessed": 1772536044002,
+      "type": "file"
+    },
+    {
+      "path": "cmd/root.go",
+      "accessCount": 1,
+      "lastAccessed": 1772536096702,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/styles.go",
+      "accessCount": 1,
+      "lastAccessed": 1772536096758,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/confirm.go",
+      "accessCount": 1,
+      "lastAccessed": 1772536121423,
+      "type": "file"
+    },
+    {
+      "path": "internal/tui/input.go",
+      "accessCount": 1,
+      "lastAccessed": 1772536121528,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

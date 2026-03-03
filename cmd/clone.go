@@ -8,6 +8,7 @@ import (
 	"github.com/diogo/ghtools/internal/gh"
 	"github.com/diogo/ghtools/internal/runner"
 	"github.com/diogo/ghtools/internal/tui"
+	"github.com/diogo/ghtools/internal/types"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +38,12 @@ func runClone(clonePath string) error {
 		return fmt.Errorf("clone path does not exist: %s", clonePath)
 	}
 
-	repos, err := gh.FetchRepos(false, cfg.CacheTTL, cfg.DefaultOrg)
+	var repos []types.Repo
+	err := tui.RunWithSpinner("Fetching repositories...", func() error {
+		var err error
+		repos, err = gh.FetchRepos(false, cfg.CacheTTL, cfg.DefaultOrg)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -83,14 +89,57 @@ func runClone(clonePath string) error {
 	})
 	fmt.Println()
 
+	failedCount := 0
 	for _, result := range results {
 		if result.Success {
 			tui.PrintSuccess(result.Name + ": " + result.Message)
 		} else {
 			tui.PrintError(result.Name + ": " + result.Message)
+			failedCount++
 		}
 	}
 
-	tui.PrintSuccess("All clone operations completed.")
+	if failedCount > 0 {
+		retry, _ := tui.RunConfirm(fmt.Sprintf("%d operations failed. Retry?", failedCount), false)
+		if retry {
+			// Retry failed repos - filter and re-run
+			var retryTasks []runner.Task
+			for _, result := range results {
+				if !result.Success {
+					repo := result.Name
+					repoName := filepath.Base(repo)
+					targetDir := filepath.Join(clonePath, repoName)
+					retryTasks = append(retryTasks, runner.Task{
+						Name: repo,
+						Fn: func() (string, error) {
+							if _, err := os.Stat(targetDir); err == nil {
+								return "Skipped (directory exists)", nil
+							}
+							if err := gh.CloneRepo(repo, targetDir); err != nil {
+								return "", err
+							}
+							return "Cloned", nil
+						},
+					})
+				}
+			}
+			if len(retryTasks) > 0 {
+				r := runner.New(cfg.MaxJobs)
+				retryResults := r.Run(retryTasks, func(done, total int) {
+					fmt.Printf("\r  Retry Progress: %d/%d", done, total)
+				})
+				fmt.Println()
+				for _, result := range retryResults {
+					if result.Success {
+						tui.PrintSuccess(result.Name + ": " + result.Message)
+					} else {
+						tui.PrintError(result.Name + ": " + result.Message)
+					}
+				}
+			}
+		}
+	} else {
+		tui.PrintSuccess("All clone operations completed.")
+	}
 	return nil
 }

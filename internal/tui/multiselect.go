@@ -169,6 +169,9 @@ func (m multiSelectModel) View() string {
 
 	if len(m.filtered) == 0 {
 		b.WriteString(StyleMuted.Render("  No matches") + "\n")
+		if m.filter.Value() != "" {
+			b.WriteString(StyleInfo.Render("  Press Esc to clear filter") + "\n")
+		}
 	}
 
 	return b.String()

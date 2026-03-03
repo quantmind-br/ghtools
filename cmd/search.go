@@ -6,6 +6,7 @@ import (
 	"github.com/diogo/ghtools/internal/cache"
 	"github.com/diogo/ghtools/internal/gh"
 	"github.com/diogo/ghtools/internal/tui"
+	"github.com/diogo/ghtools/internal/types"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +23,12 @@ func init() {
 }
 
 func runSearch() error {
-	repos, err := gh.FetchRepos(false, cfg.CacheTTL, cfg.DefaultOrg)
+	var repos []types.Repo
+	err := tui.RunWithSpinner("Fetching repositories...", func() error {
+		var err error
+		repos, err = gh.FetchRepos(false, cfg.CacheTTL, cfg.DefaultOrg)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -57,11 +63,35 @@ func runSearch() error {
 
 	switch {
 	case len(action) >= 5 && action[:5] == "Clone":
+		cloned := make(map[string]bool)
 		for _, item := range selected {
 			if err := gh.CloneRepo(item.Value, ""); err != nil {
 				tui.PrintError("Failed: " + item.Value)
+				cloned[item.Value] = false
 			} else {
 				tui.PrintSuccess("Cloned: " + item.Value)
+				cloned[item.Value] = true
+			}
+		}
+		// Retry prompt
+		failed := 0
+		for _, v := range cloned {
+			if !v {
+				failed++
+			}
+		}
+		if failed > 0 {
+			retry, _ := tui.RunConfirm(fmt.Sprintf("%d operations failed. Retry?", failed), false)
+			if retry {
+				for _, item := range selected {
+					if !cloned[item.Value] {
+						if err := gh.CloneRepo(item.Value, ""); err != nil {
+							tui.PrintError("Failed again: " + item.Value)
+						} else {
+							tui.PrintSuccess("Cloned on retry: " + item.Value)
+						}
+					}
+				}
 			}
 		}
 	case len(action) >= 6 && action[:6] == "Browse":
@@ -73,14 +103,38 @@ func runSearch() error {
 		tui.PrintWarning("Delete selected repos? This is NOT reversible!")
 		confirm, err := tui.RunInput("Type DELETE to confirm", "DELETE", "")
 		if err != nil || confirm != "DELETE" {
-			tui.PrintInfo("Cancelled")
+			tui.PrintWarning("Input did not match 'DELETE'. Cancelled.")
 			return nil
 		}
+		deleted := make(map[string]bool)
 		for _, item := range selected {
 			if err := gh.DeleteRepo(item.Value); err != nil {
 				tui.PrintError("Failed: " + item.Value)
+				deleted[item.Value] = false
 			} else {
 				tui.PrintSuccess("Deleted: " + item.Value)
+				deleted[item.Value] = true
+			}
+		}
+		// Retry prompt
+		failed := 0
+		for _, v := range deleted {
+			if !v {
+				failed++
+			}
+		}
+		if failed > 0 {
+			retry, _ := tui.RunConfirm(fmt.Sprintf("%d operations failed. Retry?", failed), false)
+			if retry {
+				for _, item := range selected {
+					if !deleted[item.Value] {
+						if err := gh.DeleteRepo(item.Value); err != nil {
+							tui.PrintError("Failed again: " + item.Value)
+						} else {
+							tui.PrintSuccess("Deleted on retry: " + item.Value)
+						}
+					}
+				}
 			}
 		}
 		_ = cache.Clear()

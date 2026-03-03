@@ -53,8 +53,11 @@ func runExplore(query, sort, lang string, limit int) error {
 	tui.PrintInfo(fmt.Sprintf("Searching GitHub for '%s' (sorted by %s)...", query, sort))
 
 	results, err := gh.SearchRepos(query, sort, lang, limit)
-	if err != nil || len(results) == 0 {
-		tui.PrintWarning("No repositories found for '" + query + "'")
+	if err != nil {
+		return err
+	}
+	if len(results) == 0 {
+		tui.ShowEmptyState("No repositories found for '" + query + "'")
 		return nil
 	}
 
