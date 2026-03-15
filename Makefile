@@ -12,7 +12,12 @@ else
 	BINARY := ghtools
 endif
 
-PREFIX := $(HOME)/.local/bin
+# Install prefix: Windows → ~/bin, Unix → ~/.local/bin
+ifneq (,$(findstring .exe,$(BINARY)))
+	PREFIX := $(HOME)/bin
+else
+	PREFIX := $(HOME)/.local/bin
+endif
 
 all: build
 
