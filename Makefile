@@ -1,22 +1,12 @@
 .PHONY: all build install uninstall clean
 
-# Detect OS - Windows (Git Bash) vs Unix
-UNAME_S := $(shell uname -s)
-ifneq (,$(findstring MINGW,$(UNAME_S)))
-	BINARY := ghtools.exe
-else ifneq (,$(findstring MSYS,$(UNAME_S)))
-	BINARY := ghtools.exe
-else ifneq (,$(findstring CYGWIN,$(UNAME_S)))
-	BINARY := ghtools.exe
+# Detect Windows: OS=Windows_NT is set on all Windows environments
+ifeq ($(OS),Windows_NT)
+BINARY := ghtools.exe
+PREFIX := $(USERPROFILE)/.local/bin
 else
-	BINARY := ghtools
-endif
-
-# Install prefix: Windows → ~/bin, Unix → ~/.local/bin
-ifneq (,$(findstring .exe,$(BINARY)))
-	PREFIX := $(HOME)/bin
-else
-	PREFIX := $(HOME)/.local/bin
+BINARY := ghtools
+PREFIX := $(HOME)/.local/bin
 endif
 
 all: build
@@ -25,12 +15,12 @@ build:
 	go build -o $(BINARY) .
 
 install: build
-	@mkdir -p $(PREFIX)
-	@cp $(BINARY) $(PREFIX)/$(BINARY)
+	mkdir -p "$(PREFIX)"
+	cp $(BINARY) "$(PREFIX)/$(BINARY)"
 	@echo "Installed ghtools to $(PREFIX)/$(BINARY)"
 
 uninstall:
-	@rm -f $(PREFIX)/ghtools $(PREFIX)/ghtools.exe
+	rm -f "$(PREFIX)/ghtools" "$(PREFIX)/ghtools.exe"
 	@echo "Uninstalled ghtools from $(PREFIX)"
 
 clean:
