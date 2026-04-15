@@ -144,6 +144,10 @@ func (m multiSelectModel) View() string {
 	countStyle := lipgloss.NewStyle().Foreground(ColorMuted)
 	b.WriteString(countStyle.Render(fmt.Sprintf("  %d/%d selected  Tab:toggle  Ctrl+A:all  Enter:confirm", selectedCount, len(m.items))) + "\n")
 
+	if m.offset > 0 {
+		b.WriteString(StyleMuted.Render("  ↑ more") + "\n")
+	}
+
 	end := min(m.offset+m.height, len(m.filtered))
 	for i := m.offset; i < end; i++ {
 		idx := m.filtered[i]
@@ -165,6 +169,10 @@ func (m multiSelectModel) View() string {
 		}
 
 		b.WriteString(cursor + check + label + "\n")
+	}
+
+	if end < len(m.filtered) {
+		b.WriteString(StyleMuted.Render("  ↓ more") + "\n")
 	}
 
 	if len(m.filtered) == 0 {
