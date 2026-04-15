@@ -39,7 +39,7 @@ func runSync(basePath string, dryRun, syncAll bool, maxDepth int) error {
 	}
 
 	if len(dirs) == 0 {
-		tui.PrintWarning("No git repositories found.")
+		tui.ShowEmptyState("No git repositories found")
 		return nil
 	}
 

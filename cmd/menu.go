@@ -7,71 +7,71 @@ import (
 )
 
 func runMenu() error {
-	title := fmt.Sprintf("GHTOOLS\nGitHub Repository Manager v%s", version)
+	subtitle := fmt.Sprintf("GitHub Repository Manager v%s", version)
 
 	options := []string{
-		"List Repositories",
-		"Search My Repos",
-		"Explore GitHub",
-		"Trending Repos",
-		"Statistics Dashboard",
-		"Clone Repositories",
-		"Sync Local Repos",
-		"Local Repo Status",
-		"Fork Repository",
-		"Create Repository",
-		"Delete Repositories",
-		"Archive/Unarchive",
-		"Change Visibility",
-		"Browse in Browser",
-		"Pull Requests",
-		"Config",
-		"Refresh Cache",
-		"Exit",
+		"[L] List Repositories",
+		"[S] Search My Repos",
+		"[E] Explore GitHub",
+		"[T] Trending Repos",
+		"[D] Statistics Dashboard",
+		"[C] Clone Repositories",
+		"[Y] Sync Local Repos",
+		"[O] Local Repo Status",
+		"[F] Fork Repository",
+		"[R] Create Repository",
+		"[X] Delete Repositories",
+		"[A] Archive/Unarchive",
+		"[V] Change Visibility",
+		"[B] Browse in Browser",
+		"[P] Pull Requests",
+		"[G] Config",
+		"[M] Refresh Cache",
+		"[Q] Exit",
 	}
 
 	for {
-		choice, err := tui.RunChooseWithTitle(title, "Select an action:", options)
+		choice, err := tui.RunChooseWithTitle("GHTOOLS", subtitle, "Select an action:", options)
 		if err != nil {
 			return nil
 		}
 
 		switch choice {
-		case "List Repositories":
+		case "[L] List Repositories":
 			runList(false, "", "")
-		case "Search My Repos":
+		case "[S] Search My Repos":
 			runSearch()
-		case "Explore GitHub":
+		case "[E] Explore GitHub":
 			runExplore("", "stars", "", 100)
-		case "Trending Repos":
+		case "[T] Trending Repos":
 			runTrending("", "daily")
-		case "Statistics Dashboard":
+		case "[D] Statistics Dashboard":
 			runStats()
-		case "Clone Repositories":
+		case "[C] Clone Repositories":
 			runClone("")
-		case "Sync Local Repos":
+		case "[Y] Sync Local Repos":
 			runSync(".", false, false, 3)
-		case "Local Repo Status":
+		case "[O] Local Repo Status":
 			runStatus(".", 3)
-		case "Fork Repository":
+		case "[F] Fork Repository":
 			runFork("", false)
-		case "Create Repository":
+		case "[R] Create Repository":
 			runCreate()
-		case "Delete Repositories":
+		case "[X] Delete Repositories":
 			runDelete()
-		case "Archive/Unarchive":
+		case "[A] Archive/Unarchive":
 			runArchive(false)
-		case "Change Visibility":
+		case "[V] Change Visibility":
 			runVisibility("")
-		case "Browse in Browser":
+		case "[B] Browse in Browser":
 			runBrowse()
-		case "Pull Requests":
+		case "[P] Pull Requests":
 			runPRList()
-		case "Config":
+		case "[G] Config":
 			runConfig()
-		case "Refresh Cache":
+		case "[M] Refresh Cache":
 			runRefresh()
-		case "Exit":
+		case "[Q] Exit":
 			return nil
 		default:
 			return nil

@@ -52,7 +52,7 @@ func runArchive(unarchive bool) error {
 	}
 
 	if len(items) == 0 {
-		tui.PrintWarning(fmt.Sprintf("No repositories available to %s", mode))
+		tui.ShowEmptyState(fmt.Sprintf("No repositories available to %s", mode))
 		return nil
 	}
 

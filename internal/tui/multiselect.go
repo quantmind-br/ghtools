@@ -24,6 +24,7 @@ type multiSelectModel struct {
 	done      bool
 	cancelled bool
 	height    int
+	width     int
 	offset    int
 }
 
@@ -60,6 +61,7 @@ func (m multiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.height < 5 {
 			m.height = 5
 		}
+		m.width = msg.Width
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
@@ -164,6 +166,13 @@ func (m multiSelectModel) View() string {
 		}
 
 		label := item.Label
+		if m.width > 0 {
+			maxLabel := m.width - 6 // account for cursor (2) + checkbox (4)
+			if maxLabel < 1 {
+				maxLabel = 1
+			}
+			label = Truncate(label, maxLabel)
+		}
 		if i == m.cursor {
 			label = StyleSecondary.Render(label)
 		}
@@ -177,6 +186,9 @@ func (m multiSelectModel) View() string {
 
 	if len(m.filtered) == 0 {
 		b.WriteString(StyleMuted.Render("  No matches") + "\n")
+		if m.filter.Value() != "" {
+			b.WriteString(StyleInfo.Render("  Press Esc to clear filter") + "\n")
+		}
 	}
 
 	return b.String()

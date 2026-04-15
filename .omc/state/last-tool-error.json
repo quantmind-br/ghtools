@@ -1,0 +1,7 @@
+{
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"/Users/diogo/dev/ghtools/README.md\"}",
+  "error": "File does not exist. Note: your current working directory is /Users/diogo/dev/ghtools.",
+  "timestamp": "2026-03-03T11:30:43.269Z",
+  "retry_count": 1
+}

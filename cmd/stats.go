@@ -6,6 +6,7 @@ import (
 
 	"github.com/diogo/ghtools/internal/gh"
 	"github.com/diogo/ghtools/internal/tui"
+	"github.com/diogo/ghtools/internal/types"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
@@ -23,7 +24,12 @@ func init() {
 }
 
 func runStats() error {
-	repos, err := gh.FetchRepos(true, cfg.CacheTTL, cfg.DefaultOrg)
+	var repos []types.Repo
+	err := tui.RunWithSpinner("Fetching repositories...", func() error {
+		var err error
+		repos, err = gh.FetchRepos(true, cfg.CacheTTL, cfg.DefaultOrg)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -56,10 +62,17 @@ func runStats() error {
 		langCount[lang]++
 	}
 
+	termWidth, _ := tui.GetTerminalSize()
+	boxWidth := termWidth - 4
+	if boxWidth < 20 {
+		boxWidth = 20
+	}
+
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tui.ColorSecondary).
-		Padding(1, 2).MarginLeft(2)
+		Padding(1, 2).MarginLeft(2).
+		MaxWidth(boxWidth)
 
 	stats := fmt.Sprintf(
 		"Total Repositories:  %d\nPublic:              %d\nPrivate:             %d\nArchived:            %d",
@@ -70,7 +83,8 @@ func runStats() error {
 	metricsBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tui.ColorAccent).
-		Padding(1, 2).MarginLeft(2)
+		Padding(1, 2).MarginLeft(2).
+		MaxWidth(boxWidth)
 
 	sizeMB := totalSize / 1024
 	metrics := fmt.Sprintf(
@@ -80,9 +94,6 @@ func runStats() error {
 	fmt.Println()
 
 	// Language breakdown
-	fmt.Println(tui.StyleMuted.Render("--- Languages Breakdown ---"))
-	fmt.Println()
-
 	type langStat struct {
 		Name  string
 		Count int
@@ -92,41 +103,40 @@ func runStats() error {
 		langs = append(langs, langStat{name, count})
 	}
 	sort.Slice(langs, func(i, j int) bool { return langs[i].Count > langs[j].Count })
+	var langContent string
 	for i, l := range langs {
 		if i >= 10 {
 			break
 		}
-		fmt.Printf("  %s: %d\n", tui.StyleSecondary.Render(l.Name), l.Count)
+		langContent += fmt.Sprintf("  %s: %d\n", tui.StyleSecondary.Render(l.Name), l.Count)
 	}
-	fmt.Println()
+	tui.ShowSection("Languages", langContent)
 
 	// Top repos by stars
-	fmt.Println(tui.StyleMuted.Render("--- Top Repositories (by Stars) ---"))
-	fmt.Println()
 	sort.Slice(repos, func(i, j int) bool { return repos[i].StargazerCount > repos[j].StargazerCount })
+	var topReposContent string
 	for i, r := range repos {
 		if i >= 5 {
 			break
 		}
-		fmt.Printf("  %s  %s\n",
+		topReposContent += fmt.Sprintf("  %s  %s\n",
 			tui.StyleWarning.Render(fmt.Sprintf("%-4d", r.StargazerCount)),
 			tui.StyleSecondary.Render(r.NameWithOwner))
 	}
-	fmt.Println()
+	tui.ShowSection("Top Repositories", topReposContent)
 
 	// Recently updated
-	fmt.Println(tui.StyleMuted.Render("--- Recently Updated (last 5) ---"))
-	fmt.Println()
 	sort.Slice(repos, func(i, j int) bool { return repos[i].UpdatedAt.After(repos[j].UpdatedAt) })
+	var recentContent string
 	for i, r := range repos {
 		if i >= 5 {
 			break
 		}
-		fmt.Printf("  %s  %s\n",
+		recentContent += fmt.Sprintf("  %s  %s\n",
 			tui.StyleMuted.Render(r.UpdatedAt.Format("2006-01-02")),
 			tui.StyleSecondary.Render(r.NameWithOwner))
 	}
-	fmt.Println()
+	tui.ShowSection("Recently Updated", recentContent)
 
 	return nil
 }

@@ -46,8 +46,11 @@ func runTrending(lang, since string) error {
 	tui.PrintInfo(fmt.Sprintf("Fetching trending repositories%s...", langSuffix(lang)))
 
 	results, err := gh.SearchRepos(query, "stars", "", 30)
-	if err != nil || len(results) == 0 {
-		tui.PrintWarning("No trending repositories found")
+	if err != nil {
+		return err
+	}
+	if len(results) == 0 {
+		tui.ShowEmptyState("No trending repositories found")
 		return nil
 	}
 

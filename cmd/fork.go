@@ -37,8 +37,11 @@ func runFork(query string, cloneAfter bool) error {
 	tui.PrintInfo("Searching GitHub for '" + query + "'...")
 
 	results, err := gh.SearchRepos(query, "stars", "", 50)
-	if err != nil || len(results) == 0 {
-		tui.PrintWarning("No repositories found for '" + query + "'")
+	if err != nil {
+		return err
+	}
+	if len(results) == 0 {
+		tui.ShowEmptyState("No repositories found for '" + query + "'")
 		return nil
 	}
 

@@ -7,6 +7,7 @@ import (
 	"github.com/diogo/ghtools/internal/gh"
 	gitpkg "github.com/diogo/ghtools/internal/git"
 	"github.com/diogo/ghtools/internal/tui"
+	"github.com/diogo/ghtools/internal/types"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +39,12 @@ func init() {
 }
 
 func runPRList() error {
-	repos, err := gh.FetchRepos(false, cfg.CacheTTL, cfg.DefaultOrg)
+	var repos []types.Repo
+	err := tui.RunWithSpinner("Fetching repositories...", func() error {
+		var err error
+		repos, err = gh.FetchRepos(false, cfg.CacheTTL, cfg.DefaultOrg)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -58,16 +64,18 @@ func runPRList() error {
 		return nil
 	}
 
-	tui.PrintInfo("Fetching PRs for " + selected + "...")
-	fmt.Println()
-
-	prs, err := gh.PRList(selected, 20)
+	var prs []types.PR
+	err = tui.RunWithSpinner("Fetching PRs...", func() error {
+		var err error
+		prs, err = gh.PRList(selected, 20)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to fetch PRs: %w", err)
 	}
 
 	if len(prs) == 0 {
-		tui.PrintInfo("No open PRs found")
+		tui.ShowEmptyState("No open PRs found for this repository")
 		return nil
 	}
 
