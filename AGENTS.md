@@ -1,6 +1,10 @@
-# AGENTS.md - Agentic Coding Guidelines for ghtools
+# PROJECT KNOWLEDGE BASE
 
-## Project Overview
+**Generated:** 2025-05-14
+**Commit:** 1415f7d
+**Branch:** master
+
+## OVERVIEW
 
 **ghtools** is a Go CLI tool that provides an interactive TUI for managing GitHub repositories. It wraps the `gh` CLI and provides menu-driven access to repository operations.
 
@@ -8,6 +12,53 @@
 - **Dependencies**: Cobra v1.10.2, Bubble Tea v1.3.10, Lipgloss v1.1.0
 
 ---
+
+## STRUCTURE
+
+```
+.
+├── cmd/              # CLI commands (Cobra)
+├── internal/         # Core packages
+│   ├── cache/        # Caching functionality
+│   ├── config/       # Configuration management
+│   ├── gh/           # GitHub API wrapper (gh CLI)
+│   ├── git/          # Git operations
+│   ├── runner/       # Parallel execution
+│   ├── template/     # Template handling
+│   ├── types/        # Type definitions
+│   └── tui/          # TUI components (Bubble Tea + Lipgloss)
+├── _legacy/          # Deprecated bash script
+├── main.go           # Entry point
+├── go.mod            # Module definition
+└── Makefile          # Build automation
+```
+
+## WHERE TO LOOK
+
+| Task | Location | Notes |
+|------|----------|-------|
+| Add new CLI command | `cmd/` | Follow `verb.go` naming pattern |
+| Add TUI component | `internal/tui/` | Use existing styles + Bubble Tea patterns |
+| GitHub API call | `internal/gh/` | Wraps `gh` CLI, not direct API |
+| Git operations | `internal/git/` | Shells out to `git` CLI |
+| Config changes | `internal/config/` | JSON file in `~/.config/ghtools/` |
+| Cache logic | `internal/cache/` | File-based cache in `~/.cache/ghtools/` |
+| Parallel tasks | `internal/runner/` | Worker pool pattern |
+
+## CODE MAP
+
+| Symbol | Type | Location | Role |
+|--------|------|----------|------|
+| `Execute` | Function | `cmd/root.go:62` | Entry point from main.go |
+| `runMenu` | Function | `cmd/menu.go:9` | Interactive menu loop |
+| `FetchRepos` | Function | `internal/gh/repos.go:13` | List user repos via gh CLI |
+| `CloneRepo` | Function | `internal/gh/repos.go:36` | Clone a repository |
+| `RunWithSpinner` | Function | `internal/tui/spinner.go:60` | Async task with spinner UI |
+| `RunChoose` | Function | `internal/tui/choose.go:185` | Single-select prompt |
+| `RunMultiSelect` | Function | `internal/tui/multiselect.go:197` | Multi-select prompt |
+| `ParallelRunner` | Struct | `internal/runner/parallel.go:14` | Worker pool for parallel ops |
+| `Config` | Struct | `internal/config/config.go:10` | App configuration |
+| `Repo` | Struct | `internal/types/types.go:5` | GitHub repo data model |
 
 ## Build Commands
 
@@ -191,3 +242,47 @@ ghtools/
 - No CI/CD currently configured
 - Error messages should be user-friendly
 - Prefer interactive TUI over flag-heavy CLI
+
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
+
+This project is indexed by GitNexus as **ghtools** (732 symbols, 2181 relationships, 56 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+
+## Always Do
+
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/ghtools/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/ghtools/clusters` | All functional areas |
+| `gitnexus://repo/ghtools/processes` | All execution flows |
+| `gitnexus://repo/ghtools/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->
