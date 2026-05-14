@@ -71,7 +71,7 @@ func (m multiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.done = true
 			return m, tea.Quit
-		case "tab", " ":
+		case "tab":
 			if len(m.filtered) > 0 {
 				idx := m.filtered[m.cursor]
 				m.selected[idx] = !m.selected[idx]
@@ -84,13 +84,13 @@ func (m multiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
-		case "up", "k":
+		case "up", "ctrl+p", "ctrl+k":
 			if m.cursor > 0 {
 				m.cursor--
 				m.adjustScroll()
 			}
 			return m, nil
-		case "down", "j":
+		case "down", "ctrl+n", "ctrl+j":
 			if m.cursor < len(m.filtered)-1 {
 				m.cursor++
 				m.adjustScroll()
